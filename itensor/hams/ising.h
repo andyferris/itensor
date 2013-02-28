@@ -18,7 +18,7 @@ public:
 
     Ising(const Model& model_);
 
-    Ising(const Model& model_, Real hx, int ny = 1);
+    Ising(const Model& model_, Real hx, int ny = 1, bool cyl = true);
 
     //
     // Accessor Methods
@@ -50,6 +50,7 @@ private:
     Real J_, hx_;
     bool initted;
     MPO H;
+    bool cylinder;
 
     void init_();
 
@@ -63,18 +64,20 @@ Ising(const Model& model_)
       nx_(this->Ns),
       J_(1), 
       hx_(0),
-      initted(false)
+      initted(false),
+      cylinder(false)
     { }
 
 inline Ising::
-Ising(const Model& model_, Real hx, int ny)
+Ising(const Model& model_, Real hx, int ny,bool cyl)
     : Parent(model_), 
       model(model_), 
       ny_(ny),
       nx_(this->Ns/ny_),
       J_(1), 
       hx_(hx),
-      initted(false)
+      initted(false),
+      cylinder(cyl)
     { }
 
 void inline Ising::
@@ -120,9 +123,9 @@ init_()
         for(int q = 1; q <= (max_mpo_dist-1); ++q)
             { W += model.id(n) * row(2+q) * col(1+q); }
 
-        //Periodic BC bond
+        //Periodic BC bond (if cylinder is requested)
         const int y = (n-1)%ny_+1;
-        if(y == 1 && ny_ > 2)
+        if(y == 1 && ny_ > 2 && cylinder)
             {
             int mpo_dist = ny_-1; 
             W += model.sz(n) * row(k) * col(2+(mpo_dist-1)) * J_;
