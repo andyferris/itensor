@@ -31,7 +31,7 @@ class SpinHalf : public Model
     private:
 
     virtual int
-    getNN() const;
+    getN() const;
 
     virtual const IQIndex&
     getSi(int i) const;
@@ -113,7 +113,7 @@ doWrite(std::ostream& s) const
     }
 
 inline int SpinHalf::
-getNN() const
+getN() const
     { return N_; }
 
 inline const IQIndex& SpinHalf::
@@ -122,7 +122,7 @@ getSi(int i) const
 
 inline IQIndex SpinHalf::
 getSiP(int i) const
-    { return site_.at(i).primed(); }
+    { return primed(site_.at(i)); }
 
 inline IQIndexVal SpinHalf::
 Up(int i) const

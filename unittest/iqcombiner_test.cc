@@ -2,12 +2,14 @@
 #include "iqcombiner.h"
 #include <boost/test/unit_test.hpp>
 
+using namespace std;
+
 struct IQCombinerDefaults
     {
     const Index
     s1u,s1d,s2u,s2d,
     l1u,l10,l1d,
-    l2uu,l2u,l20,l2d,l2dd;
+    l2uu,l20,l2dd;
 
     IQIndex S1,S2,L1,L2;
 
@@ -22,9 +24,7 @@ struct IQCombinerDefaults
         l10(Index("Link1 Z0",2,Link)),
         l1d(Index("Link1 Dn",2,Link)),
         l2uu(Index("Link2 UU",2,Link)),
-        l2u(Index("Link2 Up",2,Link)),
         l20(Index("Link2 Z0",2,Link)),
-        l2d(Index("Link2 Dn",2,Link)),
         l2dd(Index("Link2 DD",2,Link))
         {
         S1 = IQIndex("S1",
@@ -40,24 +40,22 @@ struct IQCombinerDefaults
                      Out);
         L2 = IQIndex("L2",
                      l2uu,QN(+2),
-                     l2u,QN(+1),
                      l20,QN( 0),
-                     l2d,QN(-1),
                      l2dd,QN(-2),
                      Out);
 
         phi = IQTensor(S1,S2,L2);
             {
             ITensor uu(s1u,s2u,l2dd);
-            uu.Randomize();
+            uu.randomize();
             phi += uu;
 
             ITensor ud(s1u,s2d,l20);
-            ud.Randomize();
+            ud.randomize();
             phi += ud;
 
             ITensor du(s1d,s2u,l20);
-            du.Randomize();
+            du.randomize();
             phi += du;
             }
         }
@@ -77,9 +75,9 @@ TEST(Constructors)
     c2.init();
 
     CHECK(c2.isInit());
-    CHECK(c2.hasindex(L1));
-    CHECK(c2.hasindex(S1));
-    CHECK(c2.hasindex(L2));
+    CHECK(hasindex(c2,L1));
+    CHECK(hasindex(c2,S1));
+    CHECK(hasindex(c2,L2));
     CHECK_EQUAL(c2.right().m(),L1.m()*S1.m()*L2.m());
     }
 
@@ -92,10 +90,10 @@ TEST(addLeft)
     c1.addleft(L1);
     c1.addleft(S1);
 
-    CHECK(c1.hasindex(L2));
-    CHECK(c1.hasindex(S2));
-    CHECK(c1.hasindex(L1));
-    CHECK(c1.hasindex(S1));
+    CHECK(hasindex(c1,L2));
+    CHECK(hasindex(c1,S2));
+    CHECK(hasindex(c1,L1));
+    CHECK(hasindex(c1,S1));
 
     IQCombiner c1s(c1);
 
@@ -122,8 +120,8 @@ TEST(Product)
 
     IQTensor cphi = c * phi;
 
-    CHECK(cphi.hasindex(S1));
-    CHECK(cphi.hasindex(c.right()));
+    CHECK(hasindex(cphi,S1));
+    CHECK(hasindex(cphi,c.right()));
 
     IQIndex r = c.right();
 
@@ -136,9 +134,9 @@ TEST(Product)
 
     IQTensor ucphi = cc * cphi;
 
-    CHECK(ucphi.hasindex(S1));
-    CHECK(ucphi.hasindex(S2));
-    CHECK(ucphi.hasindex(L2));
+    CHECK(hasindex(ucphi,S1));
+    CHECK(hasindex(ucphi,S2));
+    CHECK(hasindex(ucphi,L2));
 
     IQTensor diff = phi - ucphi;
     CHECK_CLOSE(diff.norm(),0,1E-10);
@@ -155,8 +153,8 @@ TEST(Primes)
 
     IQTensor cpphi = primed(c) * pphi;
 
-    CHECK(cpphi.hasindex(primed(S1)));
-    CHECK(cpphi.hasindex(primed(c.right())));
+    CHECK(hasindex(cpphi,primed(S1)));
+    CHECK(hasindex(cpphi,primed(c.right())));
 
     //Check that using a primed combiner gives
     //same result as regular combiner, then
@@ -173,19 +171,16 @@ TEST(CondenseProduct)
 
     IQTensor phi(S1,S2,L2);
 
-    ITensor uu(s1u,s2u,l2dd);
-    uu.Randomize();
-    phi += uu;
-
     ITensor ud(s1u,s2d,l20);
-    ud.Randomize();
+    ud.randomize();
     phi += ud;
 
     ITensor du(s1d,s2u,l20);
-    du.Randomize();
+    du.randomize();
     phi += du;
 
-    checkDiv(phi);
+    const QN Zero;
+    CHECK(div(phi) == Zero);
 
     IQCombiner c;
     c.doCondense(true);
@@ -197,8 +192,8 @@ TEST(CondenseProduct)
 
     IQTensor cphi = c * phi;
 
-    CHECK(cphi.hasindex(S1));
-    CHECK(cphi.hasindex(c.right()));
+    CHECK(hasindex(cphi,S1));
+    CHECK(hasindex(cphi,c.right()));
 
     IQCombiner cc(c);
     cc.conj();
@@ -206,9 +201,9 @@ TEST(CondenseProduct)
 
     IQTensor ucphi = conj(c) * cphi;
 
-    CHECK(ucphi.hasindex(S1));
-    CHECK(ucphi.hasindex(S2));
-    CHECK(ucphi.hasindex(L2));
+    CHECK(hasindex(ucphi,S1));
+    CHECK(hasindex(ucphi,S2));
+    CHECK(hasindex(ucphi,L2));
 
     IQTensor diff = phi - ucphi;
     CHECK(diff.norm() < 1E-12);

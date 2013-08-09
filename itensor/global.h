@@ -9,6 +9,7 @@
 #include <vector>
 #include <iostream>
 #include <fstream>
+#include <complex>
 #include <error.h> //utilities
 #include "option.h"
 #include "assert.h"
@@ -18,16 +19,22 @@
 #include "boost/foreach.hpp"
 #define Foreach BOOST_FOREACH
 
-using namespace std::rel_ops;
+enum Direction { Fromright, Fromleft, Both, None };
 
 static const int NMAX = 8;
 static const Real MIN_CUT = 1E-20;
 static const int MAX_M = 5000;
 
+typedef std::complex<Real>
+Complex;
+
+static const Complex Complex_1 = Complex(1,0);
+static const Complex Complex_i = Complex(0,1);
+
 // The PAUSE macro is useful for debugging. 
 // Prints the current line number and pauses
 // execution until the enter key is pressed.
-#define PAUSE { Cout << "(Paused, Line " << __LINE__ << ")"; std::cin.get(); }
+#define PAUSE { std::cout << "(Paused, Line " << __LINE__ << ")"; std::cin.get(); }
 
 
 #ifndef DEBUG
@@ -60,14 +67,13 @@ enum Printdat { ShowData, HideData };
 
 #define PrintEither(X,Y) \
     {\
-    bool savep = Global::printdat();\
+    const bool savep = Global::printdat();\
     Global::printdat() = Y; \
     std::cout << "\n" << #X << " =\n" << X << std::endl; \
     Global::printdat() = savep;\
     }
 #define Print(X)    PrintEither(X,false)
 #define PrintDat(X) PrintEither(X,true)
-#define PrintIndices(T) { T.printIndices(#T); }
 
 
 bool inline
@@ -82,32 +88,6 @@ fileExists(const boost::format& fname)
     return fileExists(fname.str());
     }
 
-void inline
-writeVec(std::ostream& s, const Vector& V)
-    {
-    int m = V.Length();
-    s.write((char*)&m,sizeof(m));
-    Real val;
-    for(int k = 1; k <= m; ++k)
-        {
-        val = V(k);
-        s.write((char*)&val,sizeof(val));
-        }
-    }
-
-void inline
-readVec(std::istream& s, Vector& V)
-    {
-    int m = 1;
-    s.read((char*)&m,sizeof(m));
-    V.ReDimension(m);
-    Real val;
-    for(int k = 1; k <= m; ++k)
-        {
-        s.read((char*)&val,sizeof(val));
-        V(k) = val;
-        }
-    }
 
 template<class T> 
 void inline
@@ -127,24 +107,6 @@ readFromFile(const boost::format& fname, T& t)
     readFromFile(fname.str(),t);
     }
 
-template<>
-void inline
-readFromFile(const std::string& fname, Matrix& t) 
-    { 
-    std::ifstream s(fname.c_str()); 
-    if(!s.good()) 
-        Error("Couldn't open file \"" + fname + "\" for reading");
-    int Nr = 1;
-    s.read((char*)&Nr,sizeof(Nr));
-    Vector V;
-    readVec(s,V);
-    int Nc = V.Length()/Nr;
-    t = Matrix(Nr,Nc);
-    for(int r = 1; r <= Nr; ++r)
-    for(int c = 1; c <= Nc; ++c)
-        t(r,c) = V(r+Nr*(c-1));
-    s.close(); 
-    }
 
 template<class T> 
 void inline
@@ -162,24 +124,6 @@ void inline
 writeToFile(const boost::format& fname, const T& t) 
     { 
     writeToFile(fname.str(),t); 
-    }
-
-template<>
-void inline
-writeToFile(const std::string& fname, const Matrix& t) 
-    { 
-    std::ofstream s(fname.c_str()); 
-    if(!s.good()) 
-        Error("Couldn't open file \"" + fname + "\" for writing");
-    int Nr = t.Nrows();
-    int Nc = t.Ncols();
-    s.write((char*)&Nr,sizeof(Nr));
-    Vector V(Nr*Nc);
-    for(int r = 1; r <= Nr; ++r)
-    for(int c = 1; c <= Nc; ++c)
-        V(r+Nr*(c-1)) = t(r,c);
-    writeVec(s,V);
-    s.close(); 
     }
 
 //Given a prefix (e.g. pfix == "mydir")
@@ -251,19 +195,35 @@ mkTempDir(const std::string& pfix,
 *
 */
 
-enum Arrow { In = -1, Out = 1 };
+enum Arrow { In = -1, Out = 1, Neither = 0 };
 
 Arrow inline
-operator*(const Arrow& a, const Arrow& b)
-    { 
-    return (int(a)*int(b) == int(In)) ? In : Out; 
+operator-(Arrow dir)
+    {
+#ifdef DEBUG
+    if(dir == Neither)
+        Error("Cannot reverse Arrow direction 'Neither'");
+#endif
+    return (dir == In ? Out : In);
     }
-const Arrow Switch = In*Out;
 
 inline std::ostream& 
 operator<<(std::ostream& s, Arrow D)
     { 
-    s << (D == In ? "In" : "Out");
+    switch(D)
+        {
+        case In:
+            s << "In";
+            return s;
+        case Out:
+            s << "Out";
+            return s;
+        case Neither:
+            s << "Neither";
+            return s;
+        default:
+            Error("Missing Arrow case");
+        }
     return s; 
     }
 
@@ -311,23 +271,61 @@ class Global
         static bool debug4_ = false;
         return debug4_;
         }
+    /*
     static Vector& 
     lastd()
         {
         static Vector lastd_(1);
         return lastd_;
         }
+        */
     static bool& 
     checkArrows()
         {
         static bool checkArrows_ = true;
         return checkArrows_;
         }
-    static OptionSet&
-    options()
+    //Global option set
+    static OptSet&
+    opts()
         {
-        static OptionSet oset_;
-        return oset_;
+        return OptSet::GlobalOpts();
+        }
+    //Shortcut for adding global Opts,
+    //so you don't have to write Global::opts().add(Opt("MyOption",3));
+    //but just Global::opts(Opt("MyOption",3));
+    //Also see name,val shortcuts below.
+    void static
+    opts(const Opt& o)
+        {
+        OptSet::GlobalOpts().add(o);
+        }
+    //Get a global Opt by just providing its name
+    Opt static
+    opts(const Opt::Name& name)
+        {
+        return OptSet::GlobalOpts().get(name);
+        }
+    //Set global opts by providing their name and value
+    void static
+    opts(const Opt::Name& name, bool bval)
+        {
+        OptSet::GlobalOpts().add(name,bval);
+        }
+    void static
+    opts(const Opt::Name& name, int ival)
+        {
+        OptSet::GlobalOpts().add(name,ival);
+        }
+    void static
+    opts(const Opt::Name& name, Real rval)
+        {
+        OptSet::GlobalOpts().add(name,rval);
+        }
+    void static
+    opts(const Opt::Name& name, const std::string& sval)
+        {
+        OptSet::GlobalOpts().add(name,sval);
         }
     };
 

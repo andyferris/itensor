@@ -4,7 +4,6 @@
 //
 #ifndef __ITENSOR_LOCALMPO_MPS
 #define __ITENSOR_LOCALMPO_MPS
-#include "mpo.h"
 #include "localmpo.h"
 
 template <class Tensor>
@@ -20,7 +19,7 @@ class LocalMPO_MPS
 
     LocalMPO_MPS(const MPOt<Tensor>& Op, 
                  const std::vector<MPSt<Tensor> >& psis,
-                 const Option& opt1 = Option(), const Option& opt2 = Option());
+                 const OptSet& opts = Global::opts());
 
     //
     // Typedefs
@@ -44,14 +43,15 @@ class LocalMPO_MPS
     product(const Tensor& phi, Tensor& phip) const;
 
     Real
-    expect(const Tensor& phi) const;
+    expect(const Tensor& phi) const { return lmpo_.expect(phi); }
 
     Tensor
     deltaRho(const Tensor& AA, 
-             const CombinerT& comb, Direction dir) const;
+             const CombinerT& comb, Direction dir) const
+        { return lmpo_.deltaRho(AA,comb,dir); }
 
-    void
-    diag(Tensor& D) const;
+    Tensor
+    diag() const { return lmpo_.diag(); }
 
     template <class MPSType>
     void
@@ -62,8 +62,6 @@ class LocalMPO_MPS
 
     bool
     isNull() const { return Op_ == 0; }
-    bool
-    isNotNull() const { return Op_ != 0; }
 
     Real
     weight() const { return weight_; }
@@ -73,13 +71,7 @@ class LocalMPO_MPS
     bool
     doWrite() const { return lmpo_.doWrite(); }
     void
-    doWrite(bool val);
-
-    static LocalMPO_MPS& Null()
-        {
-        static LocalMPO_MPS Null_;
-        return Null_;
-        }
+    doWrite(bool val) { lmpo_.doWrite(val); }
 
     private:
 
@@ -117,7 +109,7 @@ template <class Tensor>
 inline LocalMPO_MPS<Tensor>::
 LocalMPO_MPS(const MPOt<Tensor>& Op,
              const std::vector<MPSt<Tensor> >& psis,
-             const Option& opt1, const Option& opt2)
+             const OptSet& opts)
     : 
     Op_(&Op),
     psis_(&psis),
@@ -129,9 +121,8 @@ LocalMPO_MPS(const MPOt<Tensor>& Op,
     for(size_t j = 0; j < lmps_.size(); ++j)
         lmps_[j] = LocalMPOType(psis[j]);
 
-    OptionSet oset(opt1,opt2);
-    if(oset.defined("Weight"))
-        weight(oset.realVal("Weight"));
+    if(opts.defined("Weight"))
+        weight(opts.getReal("Weight"));
     }
 
 template <class Tensor>
@@ -150,28 +141,6 @@ product(const Tensor& phi, Tensor& phip) const
     }
 
 template <class Tensor>
-Real inline LocalMPO_MPS<Tensor>::
-expect(const Tensor& phi) const
-    {
-    return lmpo_.expect(phi);
-    }
-
-template <class Tensor>
-Tensor inline LocalMPO_MPS<Tensor>::
-deltaRho(const Tensor& AA,
-         const CombinerT& comb, Direction dir) const
-    {
-    return lmpo_.deltaRho(AA,comb,dir);
-    }
-
-template <class Tensor>
-void inline LocalMPO_MPS<Tensor>::
-diag(Tensor& D) const
-    {
-    lmpo_.diag(D);
-    }
-
-template <class Tensor>
 template <class MPSType> 
 void inline LocalMPO_MPS<Tensor>::
 position(int b, const MPSType& psi)
@@ -179,15 +148,6 @@ position(int b, const MPSType& psi)
     lmpo_.position(b,psi);
     for(size_t j = 0; j < lmps_.size(); ++j)
         lmps_[j].position(b,psi);
-    }
-
-template <class Tensor>
-void inline LocalMPO_MPS<Tensor>::
-doWrite(bool val) 
-    { 
-    lmpo_.doWrite(val);
-    //for(size_t j = 0; j < lmps_.size(); ++j)
-    //    lmps_[j].doWrite(val);
     }
 
 #endif

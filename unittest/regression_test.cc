@@ -1,6 +1,6 @@
 #include "test.h"
 #include <boost/test/unit_test.hpp>
-#include "svdworker.h"
+#include "svdalgs.h"
 
 using namespace std;
 using boost::format;
@@ -56,8 +56,6 @@ TEST(SVDIndexOrder)
     z(c(1),a(2),b(1)) = 1;
     z(c(1),a(1),b(1)) = 1;
 
-    SVDWorker svd;
-    //svd.showeigs(true);
 
     ITensor V(b);
 
@@ -66,7 +64,7 @@ TEST(SVDIndexOrder)
 
     ITSparse D;
     //Globals::debug2() = true;
-    svd.svd(z,U,D,V);
+    svd(z,U,D,V);
     //Globals::debug2() = false;
 
     //PrintDat(U);
@@ -107,26 +105,24 @@ TEST(SVDIndexOrder)
 
 TEST(SVDArrows)
     {
-    SVDWorker svd;
-
     Index l("l",2),r("r",2);
     IQIndex L("L",l,QN(1,1),In),R("R",r,QN(1,1),Out);
 
     IQTensor AA(L,R);
 
     ITensor block(l,r);
-    block.Randomize();
+    block.randomize();
     AA += block;
 
-    //PrintDat(AA);
-    checkDiv(AA);
+    const QN Zero;
+    CHECK_EQUAL(div(AA),Zero);
 
     IQTensor U(L),V(R);
     IQTSparse D;
-    svd.svd(AA,U,D,V);
+    svd(AA,U,D,V);
 
-    checkDiv(U);
-    checkDiv(V);
+    CHECK_EQUAL(div(U),Zero);
+    CHECK_EQUAL(div(V),Zero);
     }
 
 TEST(ExpandIndex)
@@ -151,9 +147,9 @@ TEST(ExpandIndex)
     ITensor oo(l,occ,primed(occ));
     oo(l(1),occ(1),primed(occ)(1)) = 1;
 
-    oo.expandIndex(occ,S,S.offset(occ));
+    oo.expandIndex(occ,S,offset(S,occ));
 
-    oo.expandIndex(primed(occ),primed(S),primed(S).offset(primed(occ)));
+    oo.expandIndex(primed(occ),primed(S),offset(S,occ));
 
     CHECK_CLOSE(0,oo(S(1),primed(S)(1),l(1)),1E-5);
     CHECK_CLOSE(1,oo(S(2),primed(S)(2),l(1)),1E-5);
@@ -180,6 +176,7 @@ TEST(ConvertToITensor)
     }
 
 
+/*
 TEST(IndexOrder)
     {
     //
@@ -219,5 +216,6 @@ TEST(IndexOrder)
     CHECK_CLOSE(order2.val0(),order2alt.val0(),1E-5);
 
     }
+    */
 
 BOOST_AUTO_TEST_SUITE_END()

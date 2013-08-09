@@ -30,6 +30,9 @@ class IQTSparse
     //Set diagonal to a constant d. If d == 1 makes a Kronecker delta
     IQTSparse(const IQIndex& i1, const IQIndex& i2, Real d);
 
+    //Set diagonal to a vector D.
+    IQTSparse(const IQIndex& i1, const IQIndex& i2, const VectorRef& D);
+
     IQTSparse(const IQIndex& i1, const IQIndex& i2, 
                   const IQIndex& i3);
 
@@ -49,9 +52,6 @@ class IQTSparse
     int 
     r() const { return is_->r(); }
 
-    int 
-    m(int j) const { return is_->m(j); }
-
     //uniqueReal depends on indices only, unordered:
     Real 
     uniqueReal() const { return is_->uniqueReal(); } 
@@ -60,19 +60,16 @@ class IQTSparse
     isNull() const;
 
     bool
-    isNotNull() const;
-
-    bool 
-    isComplex() const { return hasindex(IQIndex::IndReIm()); }
-
-    bool 
-    isNotComplex() const { return !hasindex(IQIndex::IndReIm()); }
-
-    bool
     isDiag() const { return true; }
 
     const IQTSDat&
     blocks() const { return *d_; }
+
+    const IndexSet<IQIndex>& 
+    indices() const { return *is_; }
+
+    bool
+    isComplex() const;
 
     //
     // Operators
@@ -146,85 +143,35 @@ class IQTSparse
 	//           const IQIndexVal& iv7 = IQIndexVal::Null(), 
     //           const IQIndexVal& iv8 = IQIndexVal::Null());
 
-    //
-    // IQIndex Methods
-    //
-
-    IQIndex 
-    findtype(IndexType t) const;
-
-    bool 
-    findtype(IndexType t, IQIndex& I) const;
-
-    int 
-    findindex(const IQIndex& I) const;
-
-    bool 
-    has_common_index(const IQTSparse& other) const;
-    
-    bool 
-    hasindex(const IQIndex& I) const;
-
-    bool 
-    notin(const IQIndex& I) const { return !hasindex(I); }
 
     //
     // Primelevel Methods 
     //
 
-    void 
-    noprime(PrimeType p = primeBoth);
+    IQTSparse& 
+    prime(int inc = 1) { prime(All,inc); return *this; }
 
-    void 
-    doprime(PrimeType pt, int inc = 1);
+    IQTSparse& 
+    prime(const IQIndex& I, int inc = 1);
 
-    void 
-    primeall() { doprime(primeBoth,1); }
+    IQTSparse& 
+    prime(IndexType type, int inc = 1);
 
-    void 
-    primesite() { doprime(primeSite,1); }
+    IQTSparse& 
+    noprime(IndexType type = All);
 
-    void 
-    primelink() { doprime(primeLink,1); }
+    IQTSparse& 
+    noprime(const IQIndex& I);
 
-    void 
-    mapprime(int plevold, int plevnew, PrimeType pt = primeBoth);
-
-    void 
-    mapprimeind(const IQIndex& I, int plevold, int plevnew, 
-                PrimeType pt = primeBoth);
-
-    void 
-    primeind(const IQIndex& I, int inc = 1);
-
-    void 
-    noprimeind(const IQIndex& I);
-
-    friend inline IQTSparse
-    primed(IQTSparse S, int inc = 1)
-        { S.doprime(primeBoth,inc); return S; }
-
-    friend inline IQTSparse
-    primesite(IQTSparse S, int inc = 1)
-        { S.doprime(primeSite,inc); return S; }
-
-    friend inline IQTSparse
-    primelink(IQTSparse S, int inc = 1)
-        { S.doprime(primeLink,inc); return S; }
-
-    friend inline IQTSparse
-    primeind(IQTSparse S, const IQIndex& I, int inc = 1)
-        { S.primeind(I,inc); return S; }
-
-    friend inline IQTSparse
-    deprimed(IQTSparse S)
-        { S.noprime(); return S; }
+    IQTSparse& 
+    mapprime(int plevold, int plevnew, IndexType type = All);
 
     //
     // Other Methods
     //
 
-    template <typename Callable> void
+    template <typename Callable> 
+    IQTSparse&
     mapElems(const Callable& f); 
 
     void
@@ -241,17 +188,6 @@ class IQTSparse
 
     void 
     scaleTo(const LogNumber& newscale) const;
-
-    void 
-    print(std::string name = "",Printdat pdat = HideData) const;
-
-    void 
-    printIndices(const std::string& name = "") const;
-
-    inline void 
-    printIndices(const boost::format& fname) const
-        { printIndices(fname.str()); }
-
 
     void
     read(std::istream& s);
@@ -278,9 +214,9 @@ class IQTSparse
     // Data members
     //
 
-    boost::intrusive_ptr<IQIndexSet> is_;
+    boost::shared_ptr<IndexSet<IQIndex> > is_;
 
-    boost::intrusive_ptr<IQTSDat> d_;
+    boost::shared_ptr<IQTSDat> d_;
 
     //
     //////////////
@@ -327,9 +263,6 @@ class IQTSDat
     IQTSDat();
 
     explicit
-    IQTSDat(const IQTSDat& other);
-
-    explicit
     IQTSDat(std::istream& s);
 
     //
@@ -359,6 +292,9 @@ class IQTSDat
     //
 
     void 
+    makeCopyOf(const IQTSDat& other);
+
+    void 
     scaleTo(const LogNumber& newscale) const;
 
     void
@@ -367,25 +303,7 @@ class IQTSDat
     void
     write(std::ostream& s) const;
 
-    friend void 
-    intrusive_ptr_add_ref(IQTSDat* p);
-
-    friend void 
-    intrusive_ptr_release(IQTSDat* p);
-
-    int 
-    count() const { return numref; }
-
-    static IQTSDat* Null()
-        {
-        //Set initial numref to 1000, stack allocated
-        static IQTSDat Null_(1000);
-#ifdef DEBUG
-        if(Null_.numref < 500)
-            Error("Null_.numref too low");
-#endif
-        return &Null_;
-        }
+    static const boost::shared_ptr<IQTSDat>& Null();
 
     private:
 
@@ -393,8 +311,6 @@ class IQTSDat
     //
     // Data members
     //
-
-    mutable unsigned int numref;
 
     mutable bool init;
 
@@ -405,9 +321,6 @@ class IQTSDat
 
     //
     //////////////
-
-    explicit
-    IQTSDat(int init_numref);
 
     void
     uninit_rmap() const;
@@ -420,7 +333,8 @@ class IQTSDat
 void 
 product(const IQTSparse& S, const IQTensor& T, IQTensor& res);
 
-template <typename Callable> void IQTSparse::
+template <typename Callable> 
+IQTSparse& IQTSparse::
 mapElems(const Callable& f)
     {
     soloDat();
@@ -429,6 +343,7 @@ mapElems(const Callable& f)
         { 
         s.mapElems(f);
         }
+    return *this;
     }
 
 

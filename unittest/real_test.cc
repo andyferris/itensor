@@ -5,12 +5,12 @@
 BOOST_AUTO_TEST_SUITE(LogNumberTest)
 
 TEST(Constructors)
-{
+    {
     LogNumber l1;
 
-    CHECK_EQUAL(l1.logNum(),0);
+    CHECK( std::isnan(l1.logNum()) );
     CHECK_EQUAL(l1.sign(),1);
-    CHECK_EQUAL(l1.real(),1);
+    CHECK( std::isnan(l1.real()) );
 
     LogNumber l2(1);
 
@@ -52,10 +52,10 @@ TEST(Constructors)
     CHECK_CLOSE(l7.logNum(),log(fabs(r)),LogNumber_Accuracy);
     CHECK_EQUAL(l7.sign(),(r > 0 ? 1 : -1));
     CHECK_CLOSE(l7.real(),r,LogNumber_Accuracy);
-}
+    }
 
 TEST(Operators)
-{
+    {
     Real a = ran1(), b = ran1();
 
     const LogNumber la(a), lb(b);
@@ -93,10 +93,10 @@ TEST(Operators)
     l8 /= l9;
 
     CHECK_CLOSE(l8.real(),a/b,LogNumber_Accuracy);
-}
+    }
 
 TEST(Comparison)
-{
+    {
     Real a = ran1(), b = ran1();
 
     const LogNumber la(a),lb(b);
@@ -129,10 +129,14 @@ TEST(Comparison)
     zero *= -1;
 
     CHECK(zero.approxEquals(0));
-}
+
+    LogNumber one(1);
+
+    CHECK(zero < one);
+    }
 
 TEST(ReadWrite)
-{
+    {
     Real a = ran1();
     LogNumber la(a); 
 
@@ -142,7 +146,7 @@ TEST(ReadWrite)
     readFromFile(".read_write/LogNumber",laR);
 
     CHECK(laR == la);
-}
+    }
 
 BOOST_AUTO_TEST_SUITE_END()
 

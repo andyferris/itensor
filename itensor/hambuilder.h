@@ -22,7 +22,7 @@ class HamBuilder
     HamBuilder(const Model& mod);
 
     int
-    NN() const { return N_; }
+    N() const { return N_; }
 
     //Sets res to an identity MPO
     template <class Tensor>
@@ -98,7 +98,7 @@ inline HamBuilder::
 HamBuilder(const Model& mod)
     :
     mod_(mod),
-    N_(mod.NN())
+    N_(mod.N())
     { }
 
 template <class Tensor>
@@ -107,7 +107,7 @@ getMPO(MPOt<Tensor>& res, Real fac) const
     {
     initialize(res);
     putLinks(res);
-    res.AAnc(1) *= fac;
+    res.Anc(1) *= fac;
     }
 
 template <class Tensor>
@@ -117,15 +117,15 @@ getMPO(int j1, const Tensor& op1,
     {
     initialize(res);
 #ifdef DEBUG
-    if(!op1.hasindex(mod_.si(j1)))
+    if(!hasindex(op1,mod_.si(j1)))
         {
         Print(j1);
-        PrintIndices(op1);
+        Print(op1.indices());
         Error("Tensor does not have correct Site index");
         }
 #endif
-    res.AAnc(j1) = op1;
-    res.AAnc(j1) *= fac;
+    res.Anc(j1) = op1;
+    res.Anc(j1) *= fac;
     putLinks(res);
     }
 
@@ -137,22 +137,22 @@ getMPO(int j1, const Tensor& op1,
     {
     initialize(res);
 #ifdef DEBUG
-    if(!op1.hasindex(mod_.si(j1)))
+    if(!hasindex(op1,mod_.si(j1)))
         {
         Print(j1);
-        PrintIndices(op1);
+        Print(op1.indices());
         Error("Tensor does not have correct Site index");
         }
-    if(!op2.hasindex(mod_.si(j2)))
+    if(!hasindex(op2,mod_.si(j2)))
         {
         Print(j2);
-        PrintIndices(op2);
+        Print(op2.indices());
         Error("Tensor does not have correct Site index");
         }
 #endif
-    res.AAnc(j1) = op1;
-    res.AAnc(j2) = op2;
-    res.AAnc(j1) *= fac;
+    res.Anc(j1) = op1;
+    res.Anc(j2) = op2;
+    res.Anc(j1) *= fac;
     putLinks(res);
     }
 
@@ -165,29 +165,29 @@ getMPO(int j1, const Tensor& op1,
     {
     initialize(res);
 #ifdef DEBUG
-    if(!op1.hasindex(mod_.si(j1)))
+    if(!hasindex(op1,mod_.si(j1)))
         {
         Print(j1);
-        PrintIndices(op1);
+        Print(op1.indices());
         Error("Tensor does not have correct Site index");
         }
-    if(!op2.hasindex(mod_.si(j2)))
+    if(!hasindex(op2,mod_.si(j2)))
         {
         Print(j2);
-        PrintIndices(op2);
+        Print(op2.indices());
         Error("Tensor does not have correct Site index");
         }
-    if(!op3.hasindex(mod_.si(j3)))
+    if(!hasindex(op3,mod_.si(j3)))
         {
         Print(j3);
-        PrintIndices(op3);
+        Print(op3.indices());
         Error("Tensor does not have correct Site index");
         }
 #endif
-    res.AAnc(j1) = op1;
-    res.AAnc(j2) = op2;
-    res.AAnc(j3) = op3;
-    res.AAnc(j1) *= fac;
+    res.Anc(j1) = op1;
+    res.Anc(j2) = op2;
+    res.Anc(j3) = op3;
+    res.Anc(j1) *= fac;
     putLinks(res);
     }
 
@@ -201,36 +201,36 @@ getMPO(int j1, const Tensor& op1,
     {
     initialize(res);
 #ifdef DEBUG
-    if(!op1.hasindex(mod_.si(j1)))
+    if(!hasindex(op1,mod_.si(j1)))
         {
         Print(j1);
-        PrintIndices(op1);
+        Print(op1.indices());
         Error("Tensor does not have correct Site index");
         }
-    if(!op2.hasindex(mod_.si(j2)))
+    if(!hasindex(op2,mod_.si(j2)))
         {
         Print(j2);
-        PrintIndices(op2);
+        Print(op2.indices());
         Error("Tensor does not have correct Site index");
         }
-    if(!op3.hasindex(mod_.si(j3)))
+    if(!hasindex(op3,mod_.si(j3)))
         {
         Print(j3);
-        PrintIndices(op3);
+        Print(op3.indices());
         Error("Tensor does not have correct Site index");
         }
-    if(!op4.hasindex(mod_.si(j4)))
+    if(!hasindex(op4,mod_.si(j4)))
         {
         Print(j4);
-        PrintIndices(op4);
+        Print(op4.indices());
         Error("Tensor does not have correct Site index");
         }
 #endif
-    res.AAnc(j1) = op1;
-    res.AAnc(j2) = op2;
-    res.AAnc(j3) = op3;
-    res.AAnc(j4) = op4;
-    res.AAnc(j1) *= fac;
+    res.Anc(j1) = op1;
+    res.Anc(j2) = op2;
+    res.Anc(j3) = op3;
+    res.Anc(j4) = op4;
+    res.Anc(j1) *= fac;
     putLinks(res);
     }
 
@@ -241,7 +241,7 @@ initialize(MPOt<Tensor>& res) const
     {
     res = MPOt<Tensor>(mod_);
     for(int j = 1; j <= N_; ++j)
-        res.AAnc(j) = mod_.id(j);
+        res.Anc(j) = mod_.id(j);
     }
 
 
@@ -255,13 +255,13 @@ putLinks(MPOt<ITensor>& res) const
         boost::format nm = boost::format("h%d-%d") % ver % i;
         links.at(i) = Index(nm.str());
         }
-    res.AAnc(1) *= links.at(1)(1);
+    res.Anc(1) *= links.at(1)(1);
     for(int i = 1; i < N_; ++i)
         {
-        res.AAnc(i) *= links.at(i-1)(1);
-        res.AAnc(i) *= links.at(i)(1);
+        res.Anc(i) *= links.at(i-1)(1);
+        res.Anc(i) *= links.at(i)(1);
         }
-    res.AAnc(N_) *= links.at(N_-1)(1);
+    res.Anc(N_) *= links.at(N_-1)(1);
     }
 
 void inline HamBuilder::
@@ -275,18 +275,18 @@ putLinks(MPOt<IQTensor>& res) const
         {
         boost::format nm = boost::format("h%d-%d") % ver % i,
                       Nm = boost::format("H%d-%d") % ver % i;
-        q += res.AA(i).div();
+        q += div(res.A(i));
         links.at(i) = IQIndex(Nm.str(),
                              Index(nm.str()),q);
         }
 
-    res.AAnc(1) *= links.at(1)(1);
+    res.Anc(1) *= links.at(1)(1);
     for(int i = 2; i < N_; ++i)
         {
-        res.AAnc(i) *= conj(links.at(i-1)(1));
-        res.AAnc(i) *= links.at(i)(1);
+        res.Anc(i) *= conj(links.at(i-1)(1));
+        res.Anc(i) *= links.at(i)(1);
         }
-    res.AAnc(N_) *= conj(links.at(N_-1)(1));
+    res.Anc(N_) *= conj(links.at(N_-1)(1));
     }
 
 #endif

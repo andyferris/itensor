@@ -7,64 +7,77 @@
 using namespace std;
 using boost::format;
 
+/*
 template<class Tensor> 
 void MPOt<Tensor>::
-position(int i, const Option& opt)
+position(int i, const OptSet& opts)
     {
     if(isNull()) Error("position: MPS is null");
 
     while(l_orth_lim_ < i-1)
         {
         if(l_orth_lim_ < 0) l_orth_lim_ = 0;
-        Tensor WF = AA(l_orth_lim_+1) * AA(l_orth_lim_+2);
-        svdBond(l_orth_lim_+1,WF,Fromleft,opt);
+        Tensor WF = A(l_orth_lim_+1) * A(l_orth_lim_+2);
+        svdBond(l_orth_lim_+1,WF,Fromleft,opts);
         }
     while(r_orth_lim_ > i+1)
         {
-        if(r_orth_lim_ > N+1) r_orth_lim_ = N+1;
-        Tensor WF = AA(r_orth_lim_-2) * AA(r_orth_lim_-1);
-        svdBond(r_orth_lim_-2,WF,Fromright,opt);
+        if(r_orth_lim_ > N_+1) r_orth_lim_ = N_+1;
+        Tensor WF = A(r_orth_lim_-2) * A(r_orth_lim_-1);
+        svdBond(r_orth_lim_-2,WF,Fromright,opts);
         }
 
     is_ortho_ = true;
     }
 template void MPOt<ITensor>::
-position(int b, const Option& opt);
+position(int b, const OptSet& opts);
 template void MPOt<IQTensor>::
-position(int b, const Option& opt);
+position(int b, const OptSet& opts);
+*/
 
+/*
 template <class Tensor>
 void MPOt<Tensor>::
-orthogonalize(const Option& opt)
+orthogonalize(const OptSet& opts)
     {
     //Do a half-sweep to the right, orthogonalizing each bond
     //but do not truncate since the basis to the right might not
     //be ortho (i.e. use the current m).
     //svd_.useOrigM(true);
-    int orig_maxm = svd_.maxm();
-    Real orig_cutoff = svd_.cutoff();
-    svd_.maxm(MAX_M);
-    svd_.cutoff(MIN_CUT);
+    int orig_maxm = maxm();
+    Real orig_cutoff = cutoff();
+    Foreach(Spectrum& spec, spectrum_)
+        {
+        spec.maxm(MAX_M);
+        spec.cutoff(MIN_CUT);
+        }
 
-    position(N);
+    position(1);
+    position(N_);
+
     //Now basis is ortho, ok to truncate
-    svd_.useOrigM(false);
-    svd_.maxm(orig_maxm);
-    svd_.cutoff(orig_cutoff);
+    Foreach(Spectrum& spec, spectrum_)
+        {
+        spec.useOrigM(false);
+        spec.maxm(orig_maxm);
+        spec.cutoff(orig_cutoff);
+        }
     position(1);
 
     is_ortho_ = true;
     }
 template
-void MPOt<ITensor>::orthogonalize(const Option& opt);
+void MPOt<ITensor>::orthogonalize(const OptSet& opts);
 template
-void MPOt<IQTensor>::orthogonalize(const Option& opt);
+void MPOt<IQTensor>::orthogonalize(const OptSet& opts);
+*/
 
+/*
 template <class Tensor>
 void MPOt<Tensor>::
-svdBond(int b, const Tensor& AA, Direction dir, const Option& opt)
+svdBond(int b, const Tensor& AA, Direction dir, const OptSet& opts)
     {
-    if(opt == PreserveShape())
+    if(opts.getBool("PreserveShape",false))
         {
         //The idea of the preserve_shape flag is to 
         //leave any external indices of the MPO on the
@@ -86,30 +99,31 @@ svdBond(int b, const Tensor& AA, Direction dir, const Option& opt)
         }
 
     SparseT D;
-    svd_.svd(b,AA,A[b],D,A[b+1]);
+    svd(AA,A_[b],D,A_[b+1],spectrum_.at(b),opts);
 
     //Push singular values/amplitudes
     //to the right or left as requested
     //and update orth_lims
     if(dir == Fromleft)
         {
-        A[b+1] *= D;
+        A_[b+1] *= D;
 
         l_orth_lim_ = b;
         if(r_orth_lim_ < b+2) r_orth_lim_ = b+2;
         }
     else //dir == Fromright
         {
-        A[b] *= D;
+        A_[b] *= D;
 
         if(l_orth_lim_ > b-1) l_orth_lim_ = b-1;
         r_orth_lim_ = b+1;
         }
     }
 template void MPOt<ITensor>::
-svdBond(int b, const ITensor& AA, Direction dir, const Option& opt);
+svdBond(int b, const ITensor& AA, Direction dir, const OptSet& opts);
 template void MPOt<IQTensor>::
-svdBond(int b, const IQTensor& AA, Direction dir, const Option& opt);
+svdBond(int b, const IQTensor& AA, Direction dir, const OptSet& opts);
+*/
 
 template <class Tensor>
 MPOt<Tensor>& MPOt<Tensor>::
@@ -141,10 +155,10 @@ operator+=(const MPOt<Tensor>& other_)
             { 
             return *this;
             }
-        return addNoOrth(other);
+        return addAssumeOrth(other);
         }
 
-    return addNoOrth(other_);
+    return addAssumeOrth(other_);
     }
 template
 MPOt<ITensor>& MPOt<ITensor>::operator+=(const MPOt<ITensor>& other);
@@ -154,17 +168,17 @@ MPOt<IQTensor>& MPOt<IQTensor>::operator+=(const MPOt<IQTensor>& other);
 int 
 findCenter(const IQMPO& psi)
     {
-    for(int j = 1; j <= psi.NN(); ++j) 
+    for(int j = 1; j <= psi.N(); ++j) 
         {
-        const IQTensor& A = psi.AA(j);
+        const IQTensor& A = psi.A(j);
         if(A.r() == 0) Error("Zero rank tensor in IQMPO");
         bool allOut = true;
-        for(int i = 1; i <= A.r(); ++i)
+        Foreach(const IQIndex& I, A.indices())
             {
             //Only look at Link IQIndices
-            if(A.index(i).type() != Link) continue;
+            if(I.type() != Link) continue;
 
-            if(A.index(i).dir() != Out)
+            if(I.dir() != Out)
                 {
                 allOut = false;
                 break;
@@ -178,13 +192,13 @@ findCenter(const IQMPO& psi)
     }
 
 void
-checkQNs(const IQMPO& psi)
+checkQNs(const IQMPO& H)
     {
-    const int N = psi.NN();
+    const int N = H.N();
 
-    QN zero;
+    const QN Zero;
 
-    int center = findCenter(psi);
+    int center = findCenter(H);
     //std::cerr << boost::format("Found the OC at %d\n") % center;
     if(center == -1)
         {
@@ -195,38 +209,37 @@ checkQNs(const IQMPO& psi)
     //including the ortho. center
     for(int i = 1; i <= N; ++i) 
         {
-        if(psi.AA(i).isNull())
+        if(H.A(i).isNull())
             {
-            std::cerr << boost::format("AA(%d) null, QNs not well defined\n")%i;
+            std::cerr << boost::format("A(%d) null, QNs not well defined\n")%i;
             Error("QNs not well defined");
             }
         try {
-            checkQNs(psi.AA(i));
+            if(div(H.A(i)) != Zero)
+                {
+                std::cerr << "At i = " << i << "\n";
+                Print(H.A(i));
+                Error("Non-zero div IQTensor in IQMPO");
+                }
             }
         catch(const ITError& e)
             {
             std::cerr << "At i = " << i << "\n";
             throw e;
             }
-        if(psi.AA(i).div() != zero)
-            {
-            std::cerr << "At i = " << i << "\n";
-            Print(psi.AA(i));
-            Error("Non-zero div IQTensor in IQMPO");
-            }
         }
 
     //Check arrows from left edge
     for(int i = 1; i < center; ++i)
         {
-        if(psi.RightLinkInd(i).dir() != In) 
+        if(H.RightLinkInd(i).dir() != In) 
             {
             std::cerr << boost::format("checkQNs: At site %d to the left of the OC, Right side Link not pointing In\n")%i;
             Error("Incorrect Arrow in IQMPO");
             }
         if(i > 1)
             {
-            if(psi.LeftLinkInd(i).dir() != Out) 
+            if(H.LeftLinkInd(i).dir() != Out) 
                 {
                 std::cerr << boost::format("checkQNs: At site %d to the left of the OC, Left side Link not pointing Out\n")%i;
                 Error("Incorrect Arrow in IQMPO");
@@ -238,12 +251,12 @@ checkQNs(const IQMPO& psi)
     for(int i = N; i > center; --i)
         {
         if(i < N)
-        if(psi.RightLinkInd(i).dir() != Out) 
+        if(H.RightLinkInd(i).dir() != Out) 
             {
             std::cerr << boost::format("checkQNs: At site %d to the right of the OC, Right side Link not pointing Out\n")%i;
             Error("Incorrect Arrow in IQMPO");
             }
-        if(psi.LeftLinkInd(i).dir() != In) 
+        if(H.LeftLinkInd(i).dir() != In) 
             {
             std::cerr << boost::format("checkQNs: At site %d to the right of the OC, Left side Link not pointing In\n")%i;
             Error("Incorrect Arrow in IQMPO");
@@ -257,13 +270,13 @@ nmultMPO(const MPOType& Aorig, const MPOType& Borig, MPOType& res,Real cut, int 
     {
     typedef typename MPOType::TensorT Tensor;
     typedef typename MPOType::IndexT IndexT;
-    if(Aorig.NN() != Borig.NN()) Error("nmultMPO(MPOType): Mismatched N");
-    int N = Borig.NN();
+    if(Aorig.N() != Borig.N()) Error("nmultMPO(MPOType): Mismatched N");
+    int N = Borig.N();
     MPOType A(Aorig), B(Borig);
 
-    SVDWorker svd = A.svd();
-    svd.cutoff(cut);
-    svd.maxm(maxm);
+    Spectrum spec;
+    spec.cutoff(cut);
+    spec.maxm(maxm);
 
     A.position(1);
     B.position(1);
@@ -271,7 +284,7 @@ nmultMPO(const MPOType& Aorig, const MPOType& Borig, MPOType& res,Real cut, int 
 
     res=A;
     res.primelinks(0,4);
-    res.mapprime(1,2,primeSite);
+    res.mapprime(1,2,Site);
 
     Tensor clust,nfork;
     vector<int> midsize(N);
@@ -279,11 +292,11 @@ nmultMPO(const MPOType& Aorig, const MPOType& Borig, MPOType& res,Real cut, int 
         {
         if(i == 1) 
             { 
-            clust = A.AA(i) * B.AA(i); 
+            clust = A.A(i) * B.A(i); 
             }
         else       
             { 
-            clust = nfork * A.AA(i) * B.AA(i); 
+            clust = nfork * A.A(i) * B.A(i); 
             }
 
         if(i == N-1) break;
@@ -300,15 +313,15 @@ nmultMPO(const MPOType& Aorig, const MPOType& Borig, MPOType& res,Real cut, int 
             }
             */
 
-        svd.denmatDecomp(i,clust, res.AAnc(i), nfork,Fromleft);
+        denmatDecomp(clust, res.Anc(i), nfork,Fromleft,spec);
 
-        IndexT mid = index_in_common(res.AA(i),nfork,Link);
+        IndexT mid = commonIndex(res.A(i),nfork,Link);
         mid.conj();
         midsize[i] = mid.m();
-        res.AAnc(i+1) = Tensor(mid,conj(res.si(i+1)),primed(res.si(i+1),2),res.RightLinkInd(i+1));
+        res.Anc(i+1) = Tensor(mid,conj(res.si(i+1)),primed(res.si(i+1),2),res.RightLinkInd(i+1));
         }
 
-    nfork = clust * A.AA(N) * B.AA(N);
+    nfork = clust * A.A(N) * B.A(N);
 
     /*
     if(nfork.norm() == 0) // this product gives 0 !!
@@ -319,9 +332,9 @@ nmultMPO(const MPOType& Aorig, const MPOType& Borig, MPOType& res,Real cut, int 
         }
         */
 
-    res.doSVD(N-1,nfork,Fromright);
+    res.svdBond(N-1,nfork,Fromright);
     res.noprimelink();
-    res.mapprime(2,1,primeSite);
+    res.mapprime(2,1,Site);
     res.cutoff(cut);
     res.orthogonalize();
 
@@ -334,10 +347,14 @@ void nmultMPO(const IQMPO& Aorig, const IQMPO& Borig, IQMPO& res,Real cut, int m
 
 template <class Tensor>
 void 
-zipUpApplyMPO(const MPSt<Tensor>& psi, const MPOt<Tensor>& K, MPSt<Tensor>& res, Real cutoff, int maxm)
+zipUpApplyMPO(const MPSt<Tensor>& psi, const MPOt<Tensor>& K, MPSt<Tensor>& res, Real cutoff, int maxm,
+              const OptSet& opts)
     {
     typedef typename Tensor::IndexT
     IndexT;
+
+    const
+    bool allow_arb_position = opts.getBool("AllowArbPosition",false);
 
     if(&psi == &res)
         Error("psi and res must be different MPS instances");
@@ -345,65 +362,78 @@ zipUpApplyMPO(const MPSt<Tensor>& psi, const MPOt<Tensor>& K, MPSt<Tensor>& res,
     if(cutoff < 0) cutoff = psi.cutoff();
     if(maxm < 0) maxm = psi.maxm();
 
-    const int N = psi.NN();
-    if(K.NN() != N) 
+    const int N = psi.N();
+    if(K.N() != N) 
         Error("Mismatched N in napplyMPO");
 
     if(!psi.isOrtho() || psi.orthoCenter() != 1)
         Error("Ortho center of psi must be site 1");
 
-    if(!K.isOrtho() || K.orthoCenter() != 1)
+    if(!allow_arb_position && (!K.isOrtho() || K.orthoCenter() != 1))
         Error("Ortho center of K must be site 1");
 
-    SVDWorker svd = K.svd();
-    svd.cutoff(cutoff);
-    svd.maxm(maxm);
+#ifdef DEBUG
+    checkQNs(psi);
+    checkQNs(K);
+    /*
+    cout << "Checking divergence in zip" << endl;
+    for(int i = 1; i <= N; i++)
+	div(psi.A(i));
+    for(int i = 1; i <= N; i++)
+	div(K.A(i));
+    cout << "Done Checking divergence in zip" << endl;
+    */
+#endif
+
+    Spectrum spec;
+    spec.cutoff(cutoff);
+    spec.maxm(maxm);
 
     res = psi; 
     res.maxm(maxm); 
     res.cutoff(cutoff);
     res.primelinks(0,4);
-    res.mapprime(0,1,primeSite);
+    res.mapprime(0,1,Site);
 
     Tensor clust,nfork;
     vector<int> midsize(N);
     int maxdim = 1;
     for(int i = 1; i < N; i++)
         {
-        if(i == 1) { clust = psi.AA(i) * K.AA(i); }
-        else { clust = nfork * (psi.AA(i) * K.AA(i)); }
+        if(i == 1) { clust = psi.A(i) * K.A(i); }
+        else { clust = nfork * (psi.A(i) * K.A(i)); }
         if(i == N-1) break; //No need to SVD for i == N-1
 
         IndexT oldmid = res.RightLinkInd(i); assert(oldmid.dir() == Out);
         nfork = Tensor(psi.RightLinkInd(i),K.RightLinkInd(i),oldmid);
         //if(clust.iten_size() == 0)	// this product gives 0 !!
 	    //throw ResultIsZero("clust.iten size == 0");
-        svd.denmatDecomp(i,clust, res.AAnc(i), nfork,Fromleft);
-        IndexT mid = index_in_common(res.AA(i),nfork,Link);
+        denmatDecomp(clust, res.Anc(i), nfork,Fromleft,spec);
+        IndexT mid = commonIndex(res.A(i),nfork,Link);
         //assert(mid.dir() == In);
         mid.conj();
         midsize[i] = mid.m();
         maxdim = max(midsize[i],maxdim);
         assert(res.RightLinkInd(i+1).dir() == Out);
-        res.AAnc(i+1) = Tensor(mid,primed(res.si(i+1)),res.RightLinkInd(i+1));
+        res.Anc(i+1) = Tensor(mid,primed(res.si(i+1)),res.RightLinkInd(i+1));
         }
-    nfork = clust * psi.AA(N) * K.AA(N);
+    nfork = clust * psi.A(N) * K.A(N);
     //if(nfork.iten_size() == 0)	// this product gives 0 !!
 	//throw ResultIsZero("nfork.iten size == 0");
 
     res.doSVD(N-1,nfork,Fromright);
     res.noprimelink();
-    res.mapprime(1,0,primeSite);
+    res.mapprime(1,0,Site);
     res.position(1);
     res.maxm(psi.maxm()); 
     res.cutoff(psi.cutoff());
     } //void zipUpApplyMPO
 template
 void 
-zipUpApplyMPO(const MPS& x, const MPO& K, MPS& res, Real cutoff, int maxm);
+zipUpApplyMPO(const MPS& x, const MPO& K, MPS& res, Real cutoff, int maxm, const OptSet& opts);
 template
 void 
-zipUpApplyMPO(const IQMPS& x, const IQMPO& K, IQMPS& res, Real cutoff, int maxm);
+zipUpApplyMPO(const IQMPS& x, const IQMPO& K, IQMPS& res, Real cutoff, int maxm, const OptSet& opts);
 
 //Expensive: scales as m^3 k^3!
 template<class Tensor>
@@ -415,36 +445,35 @@ exactApplyMPO(const MPSt<Tensor>& x, const MPOt<Tensor>& K, MPSt<Tensor>& res)
     typedef typename Tensor::CombinerT
     CombinerT;
 
-    int N = x.NN();
-    if(K.NN() != N) Error("Mismatched N in exactApplyMPO");
+    int N = x.N();
+    if(K.N() != N) Error("Mismatched N in exactApplyMPO");
 
     if(&res != &x)
         res = x;
 
-    res.AAnc(1) = x.AA(1) * K.AA(1);
+    res.Anc(1) = x.A(1) * K.A(1);
     for(int j = 1; j < N; ++j)
         {
         //cerr << boost::format("exact_applyMPO: step %d\n") % j;
         //Compute product of MPS tensor and MPO tensor
-        res.AAnc(j+1) = x.AA(j+1) * K.AA(j+1); //m^2 k^2 d^2
+        res.Anc(j+1) = x.A(j+1) * K.A(j+1); //m^2 k^2 d^2
 
         //Add common IQIndices to IQCombiner
         CombinerT comb; 
         comb.doCondense(false);
-        for(int ii = 1; ii <= res.AA(j).r(); ++ii)
+        Foreach(const IndexT& I, res.A(j).indices())
             {
-            const IndexT& I = res.AA(j).index(ii);
-            if(res.AA(j+1).hasindex(I) && I != IndexT::IndReIm())
+            if(hasindex(res.A(j+1),I))
                 comb.addleft(I);
             }
         comb.init(nameint("a",j));
 
         //Apply combiner to product tensors
-        res.AAnc(j) = res.AA(j) * comb; //m^3 k^3 d
-        res.AAnc(j+1) = conj(comb) * res.AA(j+1); //m^3 k^3 d
+        res.Anc(j) = res.A(j) * comb; //m^3 k^3 d
+        res.Anc(j+1) = conj(comb) * res.A(j+1); //m^3 k^3 d
         }
-    res.mapprime(1,0,primeSite);
-    //res.orthogonalize();
+    res.mapprime(1,0,Site);
+    res.orthogonalize();
     } //void exact_applyMPO
 template
 void 
@@ -466,7 +495,7 @@ expsmallH(const MPOt<Tensor>& H, MPOt<Tensor>& K,
     MPOt<Tensor> Hshift;
     hb.getMPO(Hshift,-Etot);
     Hshift += H;
-    Hshift.AAnc(1) *= -tau;
+    Hshift.Anc(1) *= -tau;
 
     vector<MPOt<Tensor> > xx(2);
     hb.getMPO(xx.at(0),1.0);
@@ -479,7 +508,7 @@ expsmallH(const MPOt<Tensor>& H, MPOt<Tensor>& K,
     //
     for(int o = 50; o >= 1; --o)
         {
-        if(o > 1) xx[1].AAnc(1) *= 1.0 / o;
+        if(o > 1) xx[1].Anc(1) *= 1.0 / o;
 
         Real errlim = 1E-14;
 

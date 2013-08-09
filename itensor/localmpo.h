@@ -43,11 +43,27 @@ class LocalMPO
 
     LocalMPO();
 
-    LocalMPO(const MPOt<Tensor>& Op, 
-             const Option& opt1 = Option(), const Option& opt2 = Option()); 
+    //
+    //Regular case where H is an MPO for a finite system
+    //
+    LocalMPO(const MPOt<Tensor>& H, 
+             const OptSet& opts = Global::opts());
 
+    //
+    //Use an MPS instead of an MPO. Equivalent to using an MPO
+    //of the outer product |Psi><Psi| but much more efficient.
+    //
     LocalMPO(const MPSt<Tensor>& Psi, 
-             const Option& opt1 = Option(), const Option& opt2 = Option()); 
+             const OptSet& opts = Global::opts());
+
+    //
+    //Use an MPO having boundary indices capped off by left and
+    //right boundary tensors LH and RH. Ok if one or both boundary 
+    //tensors are default-constructed.
+    //
+    LocalMPO(const MPOt<Tensor>& H, 
+             const Tensor& LH, const Tensor& RH,
+             const OptSet& opts = Global::opts());
 
     //
     // Sparse Matrix Methods
@@ -67,8 +83,8 @@ class LocalMPO
     Tensor
     deltaPhi(const Tensor& phi) const { return lop_.deltaPhi(phi); }
 
-    void
-    diag(Tensor& D) const { lop_.diag(D); }
+    Tensor
+    diag() const { return lop_.diag(); }
 
     //
     // position(b,psi) uses the MPS psi
@@ -94,45 +110,37 @@ class LocalMPO
     reset()
         {
         LHlim_ = 0;
-        RHlim_ = Op_->NN()+1;
+        RHlim_ = Op_->N()+1;
         }
 
     const Tensor&
-    L() const;
-
-    //
-    // Replace left edge tensor
-    // at current bond
-    //
+    L() const { return PH_[LHlim_]; }
+    // Replace left edge tensor at current bond
     void
-    L(const Tensor& nL);
-
-    //
-    // Replace left edge tensor 
-    // bordering site j
+    L(const Tensor& nL) { PH_[LHlim_] = nL; }
+    // Replace left edge tensor bordering site j
     // (so that nL includes sites < j)
-    //
     void
     L(int j, const Tensor& nL);
 
 
     const Tensor&
-    R() const;
-
-    //
-    // Replace right edge tensor
-    // at current bond
-    //
+    R() const { return PH_[RHlim_]; }
+    // Replace right edge tensor at current bond
     void
-    R(const Tensor& nR);
-
-    //
-    // Replace right edge tensor 
-    // bordering site j
+    R(const Tensor& nR) { PH_[RHlim_] = nR; }
+    // Replace right edge tensor bordering site j
     // (so that nR includes sites > j)
-    //
     void
     R(int j, const Tensor& nR);
+
+    const MPOt<Tensor>&
+    H() const 
+        { 
+        if(Op_ == 0)
+            Error("LocalMPO is null or contains an MPS");
+        return *Op_;
+        }
 
 
     const Tensor&
@@ -157,8 +165,6 @@ class LocalMPO
 
     bool
     isNull() const { return Op_ == 0 && Psi_ == 0; }
-    bool
-    isNotNull() const { return Op_ != 0 || Psi_ != 0; }
 
     bool
     doWrite() const { return do_write_; }
@@ -174,12 +180,6 @@ class LocalMPO
 
     const std::string&
     writeDir() const { return writedir_; }
-
-    static LocalMPO& Null()
-        {
-        static LocalMPO Null_;
-        return Null_;
-        }
 
     private:
 
@@ -242,38 +242,59 @@ LocalMPO()
 
 template <class Tensor>
 inline LocalMPO<Tensor>::
-LocalMPO(const MPOt<Tensor>& Op, 
-         const Option& opt1, const Option& opt2)
-    : Op_(&Op),
-      PH_(Op.NN()+2),
+LocalMPO(const MPOt<Tensor>& H, 
+         const OptSet& opts)
+    : Op_(&H),
+      PH_(H.N()+2),
       LHlim_(0),
-      RHlim_(Op.NN()+1),
+      RHlim_(H.N()+1),
       nc_(2),
+      lop_(opts),
       do_write_(false),
       writedir_("."),
       Psi_(0)
     { 
-    OptionSet oset(opt1,opt2);
-    if(oset.defined("NumCenter"))
-        numCenter(oset.intVal("NumCenter"));
+    if(opts.defined("NumCenter"))
+        numCenter(opts.getInt("NumCenter"));
     }
 
 template <class Tensor>
 inline LocalMPO<Tensor>::
 LocalMPO(const MPSt<Tensor>& Psi, 
-         const Option& opt1, const Option& opt2)
+         const OptSet& opts)
     : Op_(0),
-      PH_(Psi.NN()+2),
+      PH_(Psi.N()+2),
       LHlim_(0),
-      RHlim_(Psi.NN()+1),
+      RHlim_(Psi.N()+1),
       nc_(2),
+      lop_(opts),
       do_write_(false),
       writedir_("."),
       Psi_(&Psi)
     { 
-    OptionSet oset(opt1,opt2);
-    if(oset.defined("NumCenter"))
-        numCenter(oset.intVal("NumCenter"));
+    if(opts.defined("NumCenter"))
+        numCenter(opts.getInt("NumCenter"));
+    }
+
+template <class Tensor>
+inline LocalMPO<Tensor>::
+LocalMPO(const MPOt<Tensor>& H, 
+         const Tensor& LH, const Tensor& RH,
+         const OptSet& opts)
+    : Op_(&H),
+      PH_(H.N()+2),
+      LHlim_(0),
+      RHlim_(H.N()+1),
+      nc_(2),
+      lop_(opts),
+      do_write_(false),
+      writedir_("."),
+      Psi_(0)
+    { 
+    PH_[0] = LH;
+    PH_[H.N()+1] = RH;
+    if(opts.defined("NumCenter"))
+        numCenter(opts.getInt("NumCenter"));
     }
 
 template <class Tensor> inline
@@ -288,23 +309,22 @@ product(const Tensor& phi, Tensor& phip) const
     if(Psi_ != 0)
         {
         int b = position();
-        Tensor othr = (L().isNull() ? primelink(Psi_->AA(b)) : L()*primelink(Psi_->AA(b)));
-        othr *= primelink(Psi_->AA(b+1));
-        if(R().isNotNull()) 
+        Tensor othr = (L().isNull() ? primed(Psi_->A(b),Link) : L()*primed(Psi_->A(b),Link));
+        othr *= primed(Psi_->A(b+1),Link);
+        if(!R().isNull()) 
             othr *= R();
 
-        Real re = 0, im = 0;
-        BraKet(othr,phi,re,im);
+        Complex z = BraKet(othr,phi);
 
         phip = othr;
         phip.mapprime(1,0);
-        if(fabs(im) < 1E-10) 
+        if(fabs(z.imag()) < 1E-12) 
             {
-            phip *= re;
+            phip *= z.real();
             }
         else
             {
-            phip *= (re*Tensor::Complex_1() + im*Tensor::Complex_i());
+            phip *= z;
             }
         }
     else
@@ -314,41 +334,11 @@ product(const Tensor& phi, Tensor& phip) const
     }
 
 template <class Tensor>
-inline
-const Tensor& LocalMPO<Tensor>::
-L() const 
-    { 
-    return PH_[LHlim_];
-    }
-
-template <class Tensor>
-void inline LocalMPO<Tensor>::
-L(const Tensor& nL)
-    {
-    PH_[LHlim_] = nL;
-    }
-
-template <class Tensor>
 void inline LocalMPO<Tensor>::
 L(int j, const Tensor& nL)
     {
     if(LHlim_ > j-1) setLHlim(j-1);
     PH_[LHlim_] = nL;
-    }
-
-template <class Tensor>
-inline
-const Tensor& LocalMPO<Tensor>::
-R() const 
-    { 
-    return PH_[RHlim_];
-    }
-
-template <class Tensor>
-void inline LocalMPO<Tensor>::
-R(const Tensor& nR)
-    {
-    PH_[RHlim_] = nR;
     }
 
 template <class Tensor>
@@ -381,7 +371,7 @@ position(int b, const MPSType& psi)
 
     if(Op_ != 0) //normal MPO case
         {
-        lop_.update(Op_->AA(b),Op_->AA(b+1),L(),R());
+        lop_.update(Op_->A(b),Op_->A(b+1),L(),R());
         }
     }
 
@@ -419,18 +409,12 @@ shift(int j, Direction dir, const Tensor& A)
         Tensor& E = PH_.at(LHlim_);
         Tensor& nE = PH_.at(j);
         nE = E * A;
-        nE *= Op_->AA(j);
+        nE *= Op_->A(j);
         nE *= conj(primed(A));
         setLHlim(j);
         setRHlim(j+nc_+1);
 
-#ifdef DEBUG
-        //std::cerr << boost::format("LocalMPO at (%d,%d) \n") % LHlim_ % RHlim_;
-        //PrintIndices(L());
-        //PrintIndices(R());
-#endif
-
-        lop_.update(Op_->AA(j+1),Op_->AA(j+2),L(),R());
+        lop_.update(Op_->A(j+1),Op_->A(j+2),L(),R());
         }
     else //dir == Fromright
         {
@@ -442,12 +426,12 @@ shift(int j, Direction dir, const Tensor& A)
         Tensor& E = PH_.at(RHlim_);
         Tensor& nE = PH_.at(j);
         nE = E * A;
-        nE *= Op_->AA(j);
+        nE *= Op_->A(j);
         nE *= conj(primed(A));
         setLHlim(j-nc_-1);
         setRHlim(j);
 
-        lop_.update(Op_->AA(j-1),Op_->AA(j),L(),R());
+        lop_.update(Op_->A(j-1),Op_->A(j),L(),R());
         }
     }
 
@@ -463,8 +447,8 @@ makeL(const MPSType& psi, int k)
             while(LHlim_ < k)
                 {
                 const int ll = LHlim_;
-                PH_.at(ll+1) = (PH_.at(ll).isNull() ? conj(psi.AA(ll+1)) : PH_[ll]*conj(psi.AA(ll+1)));
-                PH_[ll+1] *= primelink(Psi_->AA(ll+1));
+                PH_.at(ll+1) = (PH_.at(ll).isNull() ? conj(psi.A(ll+1)) : PH_[ll]*conj(psi.A(ll+1)));
+                PH_[ll+1] *= primed(Psi_->A(ll+1),Link);
                 setLHlim(LHlim_+1);
                 }
             }
@@ -473,7 +457,7 @@ makeL(const MPSType& psi, int k)
             while(LHlim_ < k)
                 {
                 const int ll = LHlim_;
-                psi.projectOp(ll+1,Fromleft,PH_.at(ll),Op_->AA(ll+1),PH_.at(ll+1));
+                projectOp(psi,ll+1,Fromleft,PH_.at(ll),Op_->A(ll+1),PH_.at(ll+1));
                 setLHlim(LHlim_+1);
                 }
             }
@@ -492,8 +476,8 @@ makeR(const MPSType& psi, int k)
             while(RHlim_ > k)
                 {
                 const int rl = RHlim_;
-                PH_.at(rl-1) = (PH_.at(rl).isNull() ? conj(psi.AA(rl-1)) : PH_[rl]*conj(psi.AA(rl-1)));
-                PH_[rl-1] *= primelink(Psi_->AA(rl-1));
+                PH_.at(rl-1) = (PH_.at(rl).isNull() ? conj(psi.A(rl-1)) : PH_[rl]*conj(psi.A(rl-1)));
+                PH_[rl-1] *= primed(Psi_->A(rl-1),Link);
                 setRHlim(RHlim_-1);
                 }
             }
@@ -502,7 +486,7 @@ makeR(const MPSType& psi, int k)
             while(RHlim_ > k)
                 {
                 const int rl = RHlim_;
-                psi.projectOp(rl-1,Fromright,PH_.at(rl),Op_->AA(rl-1),PH_.at(rl-1));
+                projectOp(psi,rl-1,Fromright,PH_.at(rl),Op_->A(rl-1),PH_.at(rl-1));
                 setRHlim(RHlim_-1);
                 }
             }
@@ -519,7 +503,7 @@ setLHlim(int val)
         return;
         }
 
-    if(LHlim_ != val && PH_.at(LHlim_).isNotNull())
+    if(LHlim_ != val && !PH_.at(LHlim_).isNull())
         {
         //std::cerr << boost::format("Writing PH(%d) to %s\n")%LHlim_%writedir_;
         writeToFile(PHFName(LHlim_),PH_.at(LHlim_));
@@ -559,14 +543,14 @@ setRHlim(int val)
         return;
         }
 
-    if(RHlim_ != val && PH_.at(RHlim_).isNotNull())
+    if(RHlim_ != val && !PH_.at(RHlim_).isNull())
         {
         //std::cerr << boost::format("Writing PH(%d) to %s\n")%RHlim_%writedir_;
         writeToFile(PHFName(RHlim_),PH_.at(RHlim_));
         PH_.at(RHlim_) = Tensor();
         }
     RHlim_ = val;
-    if(RHlim_ > Op_->NN()) 
+    if(RHlim_ > Op_->N()) 
         {
         //Set to null tensor and return
         PH_.at(RHlim_) = Tensor();
@@ -593,7 +577,7 @@ template <class Tensor>
 void inline LocalMPO<Tensor>::
 initWrite()
     {
-    std::string global_write_dir = Global::options().stringOrDefault("WriteDir","./");
+    std::string global_write_dir = Global::opts().getString("WriteDir","./");
     writedir_ = mkTempDir("PH",global_write_dir);
     //std::cout << "Successfully created directory " + writedir_ << std::endl;
     }

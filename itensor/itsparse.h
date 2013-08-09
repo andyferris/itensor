@@ -51,23 +51,14 @@ class ITSparse
     index(int j) const { return is_.index(j); }
 
     int 
-    r() const { return is_.r_; }
+    r() const { return is_.r(); }
 
     int 
-    rn() const { return is_.rn_; }
-
-    int 
-    m(int j) const { return is_.m(j); }
+    rn() const { return is_.rn(); }
 
     //uniqueReal depends on indices only, unordered:
     Real 
-    uniqueReal() const { return is_.ur_; } 
-
-    bool 
-    isComplex() const { return hasindexn(Index::IndReIm()); }
-
-    bool 
-    isNotComplex() const { return !hasindexn(Index::IndReIm()); }
+    uniqueReal() const { return is_.uniqueReal(); } 
 
     const LogNumber&
     scale() const { return scale_; }
@@ -86,6 +77,15 @@ class ITSparse
 
     void
     diag(VectorRef v);
+
+    //Enables looping over Indices in a Foreach
+    //e.g. Foreach(const Index& I, t.index() ) { ... }
+    //const std::pair<IndexSet<Index>::index_it,IndexSet<Index>::index_it> 
+    const IndexSet<Index>&
+    indices() const { return is_; }
+
+    bool
+    isComplex() const { return false; }
 
     //
     // Operators
@@ -160,120 +160,41 @@ class ITSparse
     // Index Methods
     //
 
-    Index 
-    findtype(IndexType t) const { return is_.findtype(t); }
+    //void 
+    //addindex1(const std::vector<Index>& indices) { is_.addindex1(indices); }
 
-    bool 
-    findtype(IndexType t, Index& I) const { return is_.findtype(t,I); }
-
-    int 
-    findindex(const Index& I) const { return is_.findindex(I); }
-
-    int 
-    findindexn(const Index& I) const { return is_.findindexn(I); }
-
-    int 
-    findindex1(const Index& I) const { return is_.findindex1(I); }
-
-    bool 
-    has_common_index(const ITensor& other) const
-        { return is_.has_common_index(other.is_); }
-    
-    bool 
-    hasindex(const Index& I) const { return is_.hasindex(I); }
-
-    bool 
-    hasindexn(const Index& I) const { return is_.hasindexn(I); }
-
-    bool 
-    hasindex1(const Index& I) const { return is_.hasindex1(I); }
-
-    bool
-    hasAllIndex(const boost::array<Index,NMAX+1>& I, int nind) const
-        { return is_.hasAllIndex(I,nind); }
-
-    bool 
-    notin(const Index& I) const { return !hasindex(I); }
-
-    void 
-    addindex1(const std::vector<Index>& indices) { is_.addindex1(indices); }
-
-    void 
-    addindex1(const Index& I) { is_.addindex1(I); }
-
-    //Removes the jth index as found by findindex
-    void 
-    removeindex1(int j) { is_.removeindex1(j); }
-
-    void 
-    removeindex1(const Index& I) { is_.removeindex1(is_.findindex1(I)); }
-
-    void 
-    mapindex(const Index& i1, const Index& i2) { is_.mapindex(i1,i2); }
+    //void 
+    //addindex1(const Index& I) { is_.addindex1(I); }
 
     //
     // Primelevel Methods 
     //
 
-    void 
-    noprime(PrimeType p = primeBoth) { is_.noprime(p); }
+    ITSparse& 
+    prime(int inc = 1) { is_.prime(inc); return *this; }
 
-    void 
-    doprime(PrimeType pt, int inc = 1) { is_.doprime(pt,inc); }
+    ITSparse& 
+    prime(IndexType type, int inc = 1) { is_.prime(type,inc); return *this; }
 
-    void 
-    primeall() { doprime(primeBoth,1); }
+    ITSparse& 
+    prime(const Index& I, int inc = 1) { is_.prime(I,inc); return *this; }
 
-    void 
-    primesite() { doprime(primeSite,1); }
+    ITSparse& 
+    noprime(IndexType type = All) { is_.noprime(type); return *this; }
 
-    void 
-    primelink() { doprime(primeLink,1); }
+    ITSparse& 
+    noprime(const Index& I) { is_.noprime(I); return *this; }
 
-    void 
-    mapprime(int plevold, int plevnew, PrimeType pt = primeBoth)
-        { is_.mapprime(plevold,plevnew,pt); }
-
-    void 
-    mapprimeind(const Index& I, int plevold, int plevnew, 
-                PrimeType pt = primeBoth)
-        { is_.mapprimeind(I,plevold,plevnew,pt); }
-
-    void 
-    primeind(const Index& I, int inc = 1)
-        { mapindex(I,primed(I,inc)); }
-
-    void 
-    primeind(const Index& I, const Index& J) { is_.primeind(I,J); }
-
-    void 
-    noprimeind(const Index& I) { mapindex(I,I.deprimed()); }
-
-    friend inline ITSparse
-    primed(ITSparse S, int inc = 1)
-        { S.doprime(primeBoth,inc); return S; }
-
-    friend inline ITSparse
-    primesite(ITSparse S, int inc = 1)
-        { S.doprime(primeSite,inc); return S; }
-
-    friend inline ITSparse
-    primelink(ITSparse S, int inc = 1)
-        { S.doprime(primeLink,inc); return S; }
-
-    friend inline ITSparse
-    primeind(ITSparse S, const Index& I, int inc = 1)
-        { S.primeind(I,inc); return S; }
-
-    friend inline ITSparse
-    deprimed(ITSparse S)
-        { S.noprime(); return S; }
+    ITSparse& 
+    mapprime(int plevold, int plevnew, IndexType type = All)
+        { is_.mapprime(plevold,plevnew,type); return *this; }
 
     //
     // Other Methods
     //
 
-    template <typename Callable> void
+    template <typename Callable> 
+    ITSparse&
     mapElems(const Callable& f);
 
     void
@@ -303,17 +224,6 @@ class ITSparse
     bool
     isNotNull() const { return (scale_ != LogNumber(0) || diag_.Length() != 0); }
 
-    void 
-    print(std::string name = "",Printdat pdat = HideData) const;
-
-    void 
-    printIndices(const std::string& name = "") const
-        { print(name,HideData); }
-
-    void 
-    printIndices(const boost::format& fname) const
-        { printIndices(fname.str()); }
-
     friend std::ostream&
     operator<<(std::ostream & s, const ITSparse & t);
 
@@ -336,7 +246,7 @@ class ITSparse
     //diagonal elements
     mutable Vector diag_;
 
-    IndexSet is_;
+    IndexSet<Index> is_;
 
     mutable LogNumber scale_;
 
@@ -357,12 +267,14 @@ class ITSparse
 void 
 product(const ITSparse& S, const ITensor& T, ITensor& res);
 
-template <typename Callable> void ITSparse::
+template <typename Callable> 
+ITSparse& ITSparse::
 mapElems(const Callable& f)
     {
     scaleTo(1);
     for(int j = 1; j <= diag_.Length(); ++j)
         diag_(j) = f(diag_(j));
+    return *this;
     }
 
 #endif

@@ -45,6 +45,8 @@ public:
     inline int memory() const;		// return memory used in bytes 
     inline void MakeTemp();
 
+    void read(std::istream& s);
+
     inline static int GetNumMats();	// return the total number of mats 
     inline static void ResetNumMats();	// Reset matrix counter to zero 
     inline static int GetNumCon();	// return the total number of con 
@@ -83,6 +85,7 @@ Matrix Exp(const MatrixRef &);
 Matrix Solve(const MatrixRef &A, const MatrixRef &B);	// return A^-1 * B 
 
 void Orthog(const MatrixRef &, int nr = 0, int numpass = 2);
+void Orthog(const MatrixRef& Mre, const MatrixRef& Mim, int nr = 0, int numpass = 2);
 
 void 
 QRDecomp(const MatrixRef& M, Matrix& Q, Matrix& R);
@@ -91,6 +94,7 @@ QRDecomp(const MatrixRef& M, Matrix& Q, Matrix& R);
 
 void EigenValues(const MatrixRef &, Vector &, Matrix &);
 void GenEigenValues(const MatrixRef&, Vector&, Vector&);
+void GenEigenValues(const MatrixRef& A, Vector& Re, Vector& Im, Matrix& ReV, Matrix& ImV);
 void HermitianEigenvalues(const Matrix& re, const Matrix& im, Vector& evals,
 	                                Matrix& revecs, Matrix& ievecs);
 void
@@ -128,6 +132,7 @@ public:
 
 // Making and resizing:
     inline Vector (int);
+    inline Vector (int, Real);
     inline void ReDimension(int);
     void ReduceDimension(int);
     void Enlarge(int);			// Change size while keeping contents
@@ -150,6 +155,8 @@ public:
     inline int memory() const;		// return memory used in bytes 
     inline Vector ();
     inline ~Vector ();
+
+    void read(std::istream& s);
 
     friend class SparseVector;
 

@@ -26,13 +26,12 @@ class DMRGObserver : public Observer
     virtual ~DMRGObserver() { }
 
     void virtual
-    measure(int sw, int ha, int b, const SVDWorker& svd, Real energy,
-              const Option& opt1 = Option(), const Option& opt2 = Option(), 
-              const Option& opt3 = Option(), const Option& opt4 = Option());
+    measure(int N, int sw, int ha, int b, const Spectrum& spec, Real energy,
+            const OptSet& opts = Global::opts());
     
     bool virtual
-    checkDone(int sw, const SVDWorker& svd, Real energy,
-                const Option& opt1 = Option(), const Option& opt2 = Option());
+    checkDone(int sw, Real energy,
+              const OptSet& opts = Global::opts());
 
     Real 
     energyErrgoal() const { return energy_errgoal; }
@@ -59,6 +58,8 @@ class DMRGObserver : public Observer
     Real energy_errgoal; //Stop DMRG once energy has converged to this precision
     Real orth_weight;    //How much to penalize non-orthogonality in multiple-state DMRG
     bool printeigs;      //Print slowest decaying eigenvalues after every sweep
+    int max_eigs;
+    Real max_te;
 
     //
     /////////////
@@ -67,39 +68,65 @@ class DMRGObserver : public Observer
 
 inline DMRGObserver::
 DMRGObserver() 
-    : energy_errgoal(-1), 
-      orth_weight(1),
-      printeigs(true)
+    : 
+    energy_errgoal(-1), 
+    orth_weight(1),
+    printeigs(true),
+    max_eigs(-1),
+    max_te(-1)
     { }
 
 
 void inline DMRGObserver::
-measure(int sw, int ha, int b, const SVDWorker& svd, Real energy,
-        const Option& opt1, const Option& opt2, const Option& opt3, const Option& opt4)
+measure(int N, int sw, int ha, int b, const Spectrum& spec, Real energy,
+        const OptSet& opts)
     {
     if(printeigs)
         {
-        if(b == 1 && ha == 2) 
+        if(b == N/2 && ha == 2)
             {
-            Cout << "\n    Largest m during sweep " << sw << " was " << svd.maxEigsKept() << "\n";
-            Cout << "    Largest truncation error: " << svd.maxTruncerr() << Endl;
-            Vector center_eigs = svd.eigsKept(svd.NN()/2);
-            Cout << "    Eigs at center bond: ";
+            Cout << Endl;
+            Vector center_eigs = spec.eigsKept();
+            Real S = 0;
+            for(int j = 1; j <= center_eigs.Length(); ++j) 
+                {
+                S -= center_eigs(j)*log(fabs(center_eigs(j)));
+                }
+            Cout << Format("    vN Entropy at center bond b=%d = %.10f") % (N/2) % S << Endl;
+            Cout << Format("    Eigs at center bond b=%d: ") % (N/2);
             for(int j = 1; j <= min(center_eigs.Length(),10); ++j) 
                 {
-                Cout << Format(center_eigs(j) > 1E-2 ? ("%.2f") : ("%.2E")) % center_eigs(j);
-                Cout << ((j != min(center_eigs.Length(),10)) ? ", " : "");
+                const Real eig = center_eigs(j);
+                if(eig < 1E-3) break;
+                Cout << Format("%.4f ") % eig;
                 }
-            Cout << std::endl;
-            Cout << Format("    Energy after sweep %d is %f") % sw % energy << Endl;
+            Cout << Endl;
             }
+        }
+
+    max_eigs = max(max_eigs,spec.numEigsKept());
+    max_te = max(max_te,spec.truncerr());
+    if(b == 1 && ha == 2) 
+        {
+        if(!printeigs) Cout << Endl;
+        if(max_eigs > 0)
+            {
+            Cout << "    Largest m during sweep " << sw << " was " << max_eigs << "\n";
+            max_eigs = -1;
+            }
+        if(max_te > 0)
+            {
+            Cout << "    Largest truncation error: " << max_te << Endl;
+            max_te = -1;
+            }
+        Cout << Format("    Energy after sweep %d is %f") % sw % energy << Endl;
         }
     }
 
 
 bool inline DMRGObserver::
-checkDone(int sw, const SVDWorker& svd, Real energy,
-          const Option& opt1, const Option& opt2)
+checkDone(int sw, Real energy,
+          const OptSet& opts)
     {
     static Real last_energy;
     

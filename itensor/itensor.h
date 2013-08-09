@@ -5,19 +5,21 @@
 #ifndef __ITENSOR_ITENSOR_H
 #define __ITENSOR_ITENSOR_H
 #include "real.h"
-#include "index.h"
 #include "prodstats.h"
-#include "indexset.h"
+#include "counter.h"
 
-#define ITENSOR_USE_ALLOCATOR
+//#define ITENSOR_USE_ALLOCATOR
 
 #ifdef ITENSOR_USE_ALLOCATOR
 #include "allocator.h"
 #endif
 
+#define Cout std::cout
+#define Endl std::endl
+#define Format boost::format
+
 //Forward declarations
 struct ProductProps;
-class Counter;
 class Combiner;
 class ITDat;
 class ITSparse;
@@ -29,113 +31,111 @@ class ITensor
     {
     public:
 
-    //Accessor Methods ----------------------------------------------
+    //
+    //Accessor Methods
+    //
 
-    //Returns a Real number that uniquely identifies this
-    //ITensor's set of Index's (independent of their order).
-    Real 
-    uniqueReal() const { return is_.ur_; } 
-
-    //Get the jth index, j = 1,2,..,r()
-    const Index& 
-    index(int j) const { return is_.index(j); }
-
-    //The rank of this ITensor (number of indices)
+    //Rank of this ITensor (number of indices)
     int 
-    r() const { return is_.r_; }
+    r() const { return is_.r(); }
 
-    //Number of m != 1 indices
-    int 
-    rn() const { return is_.rn_; }
-
-    //Bond dimension of a given Index, j = 1,2,..,r()
-    int 
-    m(int j) const { return is_.m(j); }
-
-    //Returns true if ITensor is default constructed
+    //true if ITensor is default constructed
     bool 
-    isNull() const { return (p == 0); }
+    isNull() const { return !bool(r_); }
 
-    //Returns true if ITensor is NOT default constructed
-    bool 
-    isNotNull() const { return (p != 0); }
+    bool
+    isComplex() const { return bool(i_); }
 
-    bool 
-    isComplex() const { return hasindexn(Index::IndReIm()); }
+    //Sets this ITensor to its real part only
+    ITensor&
+    takeRealPart();
 
-    bool 
-    isNotComplex() const { return !hasindexn(Index::IndReIm()); }
+    //Sets this ITensor to its imaginary part only
+    //(will be real afterward)
+    ITensor&
+    takeImagPart();
 
+    //Enables looping over Indices in a Foreach
+    //e.g. Foreach(const Index& I, t.index() ) { ... }
+    const IndexSet<Index>&
+    indices() const { return is_; }
+
+    //Read-only access to scale factor, used internally for efficient scalar ops
     const LogNumber&
     scale() const { return scale_; }
 
-    //Can be used for iteration over Indices in a Foreach loop
-    //e.g. Foreach(const Index& I, t.index() ) { ... }
-    const std::pair<IndexSet::index_it,IndexSet::index_it> 
-    index() const  
-        { return is_.index(); }
+    //
+    //Constructors
+    //
 
-
-    //Constructors --------------------------------------------------
-
+    //Construct Null ITensor, isNull returns true
     ITensor();
 
-    ITensor(Real val);
-
+    //Construct rank 1 ITensor, all entries set to zero
     explicit 
     ITensor(const Index& i1);
 
-    ITensor(const Index& i1, Real val);
-
-    ITensor(const Index& i1, const VectorRef& V);
-
+    //Construct rank 2 ITensor, all entries set to zero
     ITensor(const Index& i1,const Index& i2);
 
-    //Create an ITensor as a matrix with 'a' on the diagonal
-    ITensor(const Index& i1,const Index& i2,Real a);
-
-    ITensor(const Index& i1,const Index& i2,const MatrixRef& M);
-
+    //Construct ITensor up to rank 8, entries set to zero
     ITensor(const Index& i1, const Index& i2, const Index& i3,
-            const Index& i4 = Index::Null(), 
-            const Index& i5 = Index::Null(), 
+            const Index& i4 = Index::Null(),
+            const Index& i5 = Index::Null(),
             const Index& i6 = Index::Null(),
-            const Index& i7 = Index::Null(), 
+            const Index& i7 = Index::Null(),
             const Index& i8 = Index::Null());
 
-    explicit 
-    ITensor(const IndexVal& iv, Real fac = 1);
+    //Construct rank 0 ITensor (scalar), value set to val
+    explicit
+    ITensor(Real val);
 
+    //Construct rank 1 ITensor, all entries set to val
+    ITensor(const Index& i1, Real val);
+
+    //Construct rank 1 ITensor, entries set to those of V
+    ITensor(const Index& i1, const VectorRef& V);
+
+    //Construct rank 2 ITensor, entries set to those of M
+    ITensor(const Index& i1, const Index& i2, const MatrixRef& M);
+
+    //Construct rank 2 ITensor (a matrix) with 'a' on the diagonal
+    ITensor(const Index& i1, const Index& i2, Real a);
+
+    // Construct rank 1 tensor T from IndexVal iv = (I,n)
+    // (I is an Index, n an int)
+    // such that T(I(n)) == 1
+    explicit 
+    ITensor(const IndexVal& iv);
+
+    // Construct rank 2 tensor T from IndexVals 
+    // iv1 = (I1,n1), iv2 = (I2,n2)
+    // such that T(I1(n1),I2(n2)) == 1
     ITensor(const IndexVal& iv1, const IndexVal& iv2);
 
+    // Construct tensor T from up to 8 IndexVals 
+    // iv1 = (I1,n1), iv2 = (I2,n2), iv3 = (I3,n3), ...
+    // such that T(I1(n1),I2(n2),I3(n3),...) == 1
     ITensor(const IndexVal& iv1, const IndexVal& iv2, 
             const IndexVal& iv3, const IndexVal& iv4 = IndexVal::Null(), 
             const IndexVal& iv5 = IndexVal::Null(), const IndexVal& iv6 = IndexVal::Null(), 
             const IndexVal& iv7 = IndexVal::Null(), const IndexVal& iv8 = IndexVal::Null());
 
     explicit 
-    ITensor(const std::vector<Index>& I);
+    ITensor(const IndexSet<Index>& I);
 
-    ITensor(const std::vector<Index>& I, const Vector& V);
+    ITensor(const IndexSet<Index>& I, const Vector& V);
 
-    ITensor(const std::vector<Index>& I, const ITensor& other);
+    ITensor(const IndexSet<Index>& I, const ITensor& other);
 
-    ITensor(const std::vector<Index>& I, const ITensor& other, Permutation P);
+    ITensor(const IndexSet<Index>& I, const ITensor& other, 
+            const Permutation& P);
 
-    ITensor(std::istream& s) { read(s); }
-
-    static const ITensor& 
-    Complex_1();
-
-    static const ITensor& 
-    Complex_i();
-
-    static const ITensor& 
-    ConjTensor();
-        
+    //Read in ITensor from binary stream s
     void 
     read(std::istream& s);
 
+    //Write out ITensor to binary stream s
     void
     write(std::ostream& s) const;
 
@@ -144,228 +144,108 @@ class ITensor
     // Operators
     //
 
-    // Contracting product
-
+    //Contracting product
+    //All matching Index pairs automatically contracted
+    //Cji = \sum_{k,l} Akjl * Blki
     ITensor& 
     operator*=(const ITensor& other);
 
-    ITensor 
-    operator*(const ITensor& other) const 
-        { ITensor res(*this); res *= other; return res; }
-
-    // Contracting product with IndexVals
-    // (sets an Index to a particular value)
-
+    //Non-contracting product
+    //Matching Index pairs are merged
+    //Ckjli = Akjl * Blki
     ITensor& 
-    operator*=(const IndexVal& iv) 
-        { return operator*=(ITensor(iv)); } 
+    operator/=(const ITensor& other);
 
-    ITensor 
-    operator*(const IndexVal& iv) const 
-        { ITensor res(*this); res *= iv; return res; }
-
-    friend inline ITensor 
-    operator*(const IndexVal& iv, const ITensor& t) 
-        { return (ITensor(iv) *= t); }
-
-    // Multiplication and division by scalars
-
+    //Multiplication and division by scalar
     ITensor& 
-    operator*=(Real fac) { scale_ *= fac; return *this; }
-
-    ITensor 
-    operator*(Real fac) const 
-        { ITensor res(*this); res *= fac; return res; }
-
-    friend inline ITensor 
-    operator*(Real fac, ITensor t) 
-        { return (t *= fac); }
+    operator*=(Real fac);
 
     ITensor& 
     operator/=(Real fac) { scale_ /= fac; return *this; }
 
-    ITensor 
-    operator/(Real fac) const 
-        { ITensor res(*this); res /= fac; return res; }
+    ITensor
+    operator-() const { ITensor T(*this); T.scale_ *= -1; return T; }
 
-    friend inline ITensor 
-    operator/(Real fac, ITensor t) 
-        { return (t /= fac); }
+    //Multiplication by Complex scalar
+    ITensor&
+    operator*=(Complex z);
 
+    //Multiplication with LogNumber (very large or very small Real)
     ITensor& 
     operator*=(const LogNumber& lgnum) { scale_ *= lgnum; return *this; }
 
-    ITensor 
-    operator*(const LogNumber& lgnum) const 
-        { ITensor res(*this); res *= lgnum; return res; }
+    // Contract with IndexVal
+    // If iv = (J,n), Index J is fixed to it's nth
+    // value and rank decreases by 1
+    // (similar to summing against a Kronecker
+    // delta tensor \delta_{J,n})
+    ITensor& 
+    operator*=(const IndexVal& iv) { return operator*=(ITensor(iv)); } 
 
-    friend inline ITensor 
-    operator*(const LogNumber& lgnum, ITensor t) 
-        { return (t *= lgnum); }
-
-
-    // Non-contracting product
+    //Tensor addition and subtraction
+    //Summands must have same Indices, in any order
+    //Cijk = Aijk + Bkij
+    ITensor& 
+    operator+=(const ITensor& other);
 
     ITensor& 
-    operator/=(const ITensor& other);
+    operator-=(const ITensor& other);
 
-    ITensor 
-    operator/(const ITensor& other) const 
-        { ITensor res(*this); res /= other; return res; }
 
-    // Addition and subtraction
+    //
+    //Primelevel Methods
+    //
 
+    //Set primeLevel of Indices to zero
     ITensor& 
-    operator+=(const ITensor& o);
+    noprime(IndexType type = All) { is_.noprime(type); return *this; }
 
-    ITensor 
-    operator+(const ITensor& o) const 
-        { ITensor res(*this); res += o; return res; }
-
+    //Set primeLevel of Index I to zero
     ITensor& 
-    operator-=(const ITensor& o)
-        {
-        if(this == &o) { scale_ = 0; return *this; }
-        scale_ *= -1; operator+=(o); scale_ *= -1; return *this; 
-        }
+    noprime(const Index& I) { is_.noprime(I); return *this; }
 
-    ITensor 
-    operator-(const ITensor& o) const 
-        { ITensor res(*this); res -= o; return res; }
+    //Increase primeLevel of Indices by 1 (or optional amount inc)
+    ITensor& 
+    prime(int inc = 1) { prime(All,inc); return *this;}
 
+    //Increase primeLevel of Indices by 1 (or optional amount inc)
+    ITensor& 
+    prime(IndexType type, int inc = 1) { is_.prime(type,inc); return *this; }
 
-    //Index Methods ---------------------------------------------------
+    //Increase primeLevel of Index I by 1 (or optional amount inc)
+    ITensor& 
+    prime(const Index& I, int inc = 1) { is_.prime(I,inc); return *this; }
 
-    Index 
-    findtype(IndexType t) const { return is_.findtype(t); }
+    //Change all Indices having primeLevel plevold to have primeLevel plevnew
+    ITensor& 
+    mapprime(int plevold, int plevnew, IndexType type = All)
+        { is_.mapprime(plevold,plevnew,type); return *this; }
 
-    bool 
-    findtype(IndexType t, Index& I) const { return is_.findtype(t,I); }
+    //
+    //Element Access Methods
+    //
 
-    int 
-    findindex(const Index& I) const { return is_.findindex(I); }
-
-    int 
-    findindexn(const Index& I) const { return is_.findindexn(I); }
-
-    int 
-    findindex1(const Index& I) const { return is_.findindex1(I); }
-
-    bool 
-    has_common_index(const ITensor& other) const
-        { return is_.has_common_index(other.is_); }
-    
-    bool 
-    hasindex(const Index& I) const { return is_.hasindex(I); }
-
-    bool 
-    hasindexn(const Index& I) const { return is_.hasindexn(I); }
-
-    bool 
-    hasindex1(const Index& I) const { return is_.hasindex1(I); }
-
-    bool
-    hasAllIndex(const boost::array<Index,NMAX+1>& I, int nind) const
-        { return is_.hasAllIndex(I,nind); }
-
-    bool 
-    notin(const Index& I) const { return !hasindex(I); }
-
-    void 
-    addindex1(const std::vector<Index>& indices) { is_.addindex1(indices); }
-
-    void 
-    addindex1(const Index& I) { is_.addindex1(I); }
-
-    //Removes the jth index as found by findindex
-    void 
-    removeindex1(int j) { is_.removeindex1(j); }
-
-    void 
-    removeindex1(const Index& I) { is_.removeindex1(is_.findindex1(I)); }
-
-    void 
-    mapindex(const Index& i1, const Index& i2) { is_.mapindex(i1,i2); }
-
-    //Primelevel Methods ------------------------------------
-
-    void 
-    noprime(PrimeType p = primeBoth) { is_.noprime(p); }
-
-    void 
-    doprime(PrimeType pt, int inc = 1) { is_.doprime(pt,inc); }
-
-    void 
-    primeall() { doprime(primeBoth,1); }
-
-    void 
-    primesite(int inc = 1) { doprime(primeSite,inc); }
-
-    void 
-    primelink(int inc = 1) { doprime(primeLink,inc); }
-
-    void 
-    mapprime(int plevold, int plevnew, PrimeType pt = primeBoth)
-        { is_.mapprime(plevold,plevnew,pt); }
-
-    void 
-    mapprimeind(const Index& I, int plevold, int plevnew, 
-                PrimeType pt = primeBoth)
-        { is_.mapprimeind(I,plevold,plevnew,pt); }
-
-    void 
-    primeind(const Index& I, int inc = 1)
-        { mapindex(I,primed(I,inc)); }
-
-    void 
-    primeind(const Index& I, const Index& J) { is_.primeind(I,J); }
-
-    void 
-    noprimeind(const Index& I) { mapindex(I,I.deprimed()); }
-
-    friend inline ITensor 
-    primed(ITensor A, int inc = 1)
-        { A.doprime(primeBoth,inc); return A; }
-
-    friend inline ITensor 
-    primesite(ITensor A, int inc = 1)
-        { A.doprime(primeSite,inc); return A; }
-
-    friend inline ITensor 
-    primelink(ITensor A, int inc = 1)
-        { A.doprime(primeLink,inc); return A; }
-
-    friend inline ITensor 
-    primeind(ITensor A, const Index& I, int inc = 1)
-        { A.mapindex(I,primed(I,inc)); return A; }
-
-    friend ITensor 
-    primeind(ITensor A, const Index& I1, const Index& I2);
-
-    friend inline ITensor 
-    deprimed(ITensor A) { A.noprime(); return A; }
-
-    //Element Access Methods ----------------------------------------
-
+    //Get scalar value of rank 0 ITensor
+    //Throws ITError if r() != 0
     Real
-    toReal() const { return val0(); }
+    toReal() const;
 
-    Real 
-    val0() const;
+    //Get scalar value of rank 0 ITensor
+    //Throws ITError if r() != 0
+    Complex
+    toComplex() const;
 
-    Real 
-    val1(int i1) const;
-
-    Real& 
-    operator()();
-
-    Real 
-    operator()() const;
-
+    // IndexVal element access
+    // Given iv1 = (I1,n1), iv2 = (I2,n2), ...
+    // returns component of ITensor such that
+    // I1 temporarily set to n1, I2 to n2, etc.
+    // Can be used to set components of ITensors
+    // as well, for example, T(I1(2),I2(1)) = 3;
     Real& 
     operator()(const IndexVal& iv1);
 
-    Real operator()(const IndexVal& iv1) const;
+    Real 
+    operator()(const IndexVal& iv1) const;
 
     Real& 
     operator()(const IndexVal& iv1, const IndexVal& iv2);
@@ -374,28 +254,24 @@ class ITensor
     operator()(const IndexVal& iv1, const IndexVal& iv2) const;
 
     Real& 
-    operator()(const IndexVal& iv1, const IndexVal& iv2, 
-               const IndexVal& iv3, const IndexVal& iv4 = IndexVal::Null(), 
-               const IndexVal& iv5 = IndexVal::Null(),const IndexVal& iv6 = IndexVal::Null(),
-               const IndexVal& iv7 = IndexVal::Null(),const IndexVal& iv8 = IndexVal::Null());
+    operator()(const IndexVal& iv1, const IndexVal& iv2, const IndexVal& iv3, 
+               const IndexVal& iv4 = IndexVal::Null(), 
+               const IndexVal& iv5 = IndexVal::Null(),
+               const IndexVal& iv6 = IndexVal::Null(),
+               const IndexVal& iv7 = IndexVal::Null(),
+               const IndexVal& iv8 = IndexVal::Null());
 
     Real 
-    operator()(const IndexVal& iv1, const IndexVal& iv2, 
-               const IndexVal& iv3, const IndexVal& iv4 = IndexVal::Null(), 
-               const IndexVal& iv5 = IndexVal::Null(),const IndexVal& iv6 = IndexVal::Null(),
-               const IndexVal& iv7 = IndexVal::Null(),const IndexVal& iv8 = IndexVal::Null()) 
-    const;
-
-
-    //Methods for Mapping to Other Objects ----------------------------------
+    operator()(const IndexVal& iv1, const IndexVal& iv2, const IndexVal& iv3, 
+               const IndexVal& iv4 = IndexVal::Null(), 
+               const IndexVal& iv5 = IndexVal::Null(),
+               const IndexVal& iv6 = IndexVal::Null(),
+               const IndexVal& iv7 = IndexVal::Null(),
+               const IndexVal& iv8 = IndexVal::Null()) const;
 
     //
-    // Assume *this and other have same indices but different order.
-    // Copy other into *this, without changing the order of indices in either
-    // operator= would put the order of other into *this
+    //Methods for Mapping to Other Objects
     //
-    void 
-    assignFrom(const ITensor& other);
 
     //
     // groupIndices combines a set of indices (of possibly different sizes) 
@@ -415,84 +291,43 @@ class ITensor
     // Rijl = Aijil <-- here we have tied the 1st and 3rd index of A
     //
     void
-    tieIndices(const boost::array<Index,NMAX+1>& indices, int nind,
+    tieIndices(const boost::array<Index,NMAX>& indices, int nind,
                const Index& tied);
 
     void
     tieIndices(const Index& i1, const Index& i2,
                const Index& tied);
 
-    friend inline ITensor
-    tieIndices(const Index& i1, const Index& i2, 
-               const Index& tied, ITensor T)
-        { T.tieIndices(i1,i2,tied); return T; }
 
     void
     tieIndices(const Index& i1, const Index& i2,
                const Index& i3,
                const Index& tied);
 
-    friend inline ITensor
-    tieIndices(const Index& i1, const Index& i2, 
-               const Index& i3, const Index& tied, ITensor T)
-        { T.tieIndices(i1,i2,i3,tied); return T; }
 
     void
     tieIndices(const Index& i1, const Index& i2,
                const Index& i3, const Index& i4,
                const Index& tied);
 
-    friend inline ITensor
-    tieIndices(const Index& i1, const Index& i2, 
-               const Index& i3, const Index& i4, 
-               const Index& tied, ITensor T)
-        { T.tieIndices(i1,i2,i3,i4,tied); return T; }
 
-    //
     // The trace method sums over the given set of indices
     // (which must all have the same dimension).
     //
-    // Rik = trace(j,l,m,Aijkml) = \sum_j Aijkjj
-    //
+    // Rik = Aijkml.trace(j,l,m) = \sum_t Aitktt
+    ITensor&
+    trace(const Index& i1, 
+          const Index& i2 = Index::Null(), 
+          const Index& i3 = Index::Null(),
+          const Index& i4 = Index::Null(),
+          const Index& i5 = Index::Null(),
+          const Index& i6 = Index::Null(),
+          const Index& i7 = Index::Null(),
+          const Index& i8 = Index::Null());
 
-    void
-    trace(const boost::array<Index,NMAX+1>& indices, int nind);
+    ITensor&
+    trace(const boost::array<Index,NMAX>& indices, int nind = -1);
 
-    void
-    trace(const Index& i1, const Index& i2);
-
-    void
-    trace(const Index& i1);
-
-    ITensor friend inline
-    trace(const Index& i1, const Index& i2, ITensor T)
-        { T.trace(i1,i2); return T; }
-
-    void
-    trace(const Index& i1, const Index& i2, const Index& i3);
-
-    ITensor friend inline
-    trace(const Index& i1, const Index& i2, const Index& i3,
-          ITensor T)
-        { T.trace(i1,i2,i3); return T; }
-
-    void
-    trace(const Index& i1, const Index& i2, const Index& i3, const Index& i4);
-
-    ITensor friend inline
-    trace(const Index& i1, const Index& i2, const Index& i3, const Index& i4,
-          ITensor T)
-        { T.trace(i1,i2,i3,i4); return T; }
-
-    //
-    // Tracing over all indices results in a Real
-    //
-    Real friend inline
-    trace(ITensor T)
-        {
-        if(T.rn() != 0) T.trace(T.is_.index_,T.rn());
-        return T.val0();
-        }
 
     //
     // expandIndex replaces a smaller index with a bigger one, padding out
@@ -503,26 +338,32 @@ class ITensor
     // RiJ = |  Ai(j=J-start+1) for J = start...start+m
     //       |_ 0               otherwise
     //        
-
     void 
     expandIndex(const Index& small, const Index& big, int start);
 
+    //Set components of rank 2 ITensor using Matrix M as input
     void 
-    fromMatrix11(const Index& i1, const Index& i2, const Matrix& res);
+    fromMatrix11(const Index& i1, const Index& i2, const Matrix& M);
 
-    void 
-    toMatrix11NoScale(const Index& i1, const Index& i2, 
-                           Matrix& res) const;
+    //Convert rank 2 ITensor to a Matrix using given Index order
     void 
     toMatrix11(const Index& i1, const Index& i2, Matrix& res) const;
 
-    /*
-    // group i1,i2; i3,i4
-    void toMatrix22(const Index& i1, const Index& i2, 
-                    const Index& i3, const Index& i4,Matrix& res) const;
-    void fromMatrix22(const Index& i1, const Index& i2, 
-                      const Index& i3, const Index& i4,const Matrix& res);
+    //Convert rank 2 ITensor to a Matrix, but do not include
+    //scale factor in result
+    void 
+    toMatrix11NoScale(const Index& i1, const Index& i2, 
+                           Matrix& res) const;
 
+    // group i1,i2; i3,i4
+    void 
+    toMatrix22(const Index& i1, const Index& i2, 
+               const Index& i3, const Index& i4, Matrix& res) const;
+    void 
+    fromMatrix22(const Index& i1, const Index& i2, 
+                 const Index& i3, const Index& i4, const Matrix& res);
+
+    /*
     // group i1,i2; i3
     void toMatrix21(const Index& i1, const Index& i2, 
                     const Index& i3, Matrix& res) const;
@@ -539,41 +380,8 @@ class ITensor
                     const Index& i3, Matrix& res) const;
 
     void fromMatrix12(const Index& i1, const Index& i2, 
-                      const Index& i3, const Matrix& res);
+                      const Index& i3, const Matrix& M);
 
-    void
-    symmetricDiag11(const Index& i1, ITensor& D, ITensor& U, Index& mid) const;
-
-    void
-    symmetricDiag11(const Index& i1, ITensor& D, ITensor& U, Index& mid, int& mink, int& maxk) const;
-
-    int 
-    vecSize() const;
-
-    int 
-    maxSize() const;
-
-    void 
-    assignToVec(VectorRef v) const;
-
-    void 
-    assignFromVec(const VectorRef& v);
-
-    void 
-    reshapeDat(const Permutation& p, Vector& rdat) const;
-
-    //In-place version of reshapeDat. Does not re-order indices
-    //so resulting ITensor is *not* equivalent to original.
-    void 
-    reshapeDat(const Permutation& P);
-
-    //Re-orders indices and dat consistently
-    //so resulting ITensor *is* equivalent to original.
-    void 
-    reshape(const Permutation& P) const;
-
-    void 
-    reshapeTo(const Permutation& P, ITensor& res) const;
 
 
     //
@@ -588,24 +396,17 @@ class ITensor
 
     //Other Methods -------------------------------------------------
 
-    void 
-    Randomize();
+    const Real*
+    datStart() const;
+
+    const Real*
+    imagDatStart() const;
 
     void 
-    SplitReIm(ITensor& re, ITensor& im) const;
+    randomize();
 
     void 
-    conj() 
-        { 
-        if(!isComplex()) return; 
-        operator/=(ITensor::ConjTensor()); 
-        }
-
-    void 
-    conj(const Index& I) { }
-
-    //bool 			// Why not norm() == 0.0?  
-    //is_zero() const { return (norm() < 1E-20); } 
+    conj();
 
     Real 
     sumels() const;
@@ -613,33 +414,28 @@ class ITensor
     Real 
     norm() const;
 
-    template <typename Callable> void
+    LogNumber 
+    normLogNum() const;
+
+    Real 
+    normNoScale() const;
+
+    template <typename Callable> 
+    ITensor&
     mapElems(const Callable& f);
 
-    void
-    pseudoInvert(Real cutoff = 0);
+    void 
+    scaleOutNorm();
 
     void 
-    scaleOutNorm() const;
+    scaleTo(const LogNumber& newscale);
 
     void 
-    scaleTo(LogNumber newscale) const;
+    assignToVec(VectorRef v) const;
 
-    void 
-    print(std::string name = "",Printdat pdat = HideData) const;
-
-    void 
-    printIndices(const std::string& name = "") const
-        { print(name,HideData); }
-
-    void 
-    printIndices(const boost::format& fname) const
-        { printIndices(fname.str()); }
-
-    friend std::ostream& 
-    operator<<(std::ostream & s, const ITensor & t);
-
-    friend class commaInit;
+    //
+    // Typedefs
+    //
 
     typedef Index 
     IndexT;
@@ -653,57 +449,71 @@ class ITensor
     typedef ITSparse
     SparseT;
 
-    static const Index& 
-    ReImIndex() { return Index::IndReIm(); }
+    //Deprecated methods --------------------------
 
-    protected:
+    //Use indices().dim() instead of vecSize
+    //int 
+    //vecSize() const;
+
+    //void 
+    //assignFromVec(const VectorRef& v);
+
+
+    private:
 
     //////////////
     //
     // Data Members
     //
 
-    //mutable: const methods may want to reshape data
-    mutable boost::intrusive_ptr<ITDat> p; 
+    //Pointer to ITDat containing tensor data
+    boost::shared_ptr<ITDat> r_, //real part
+                             i_; //imag part
 
-    //Indices, maximum of 8 (is_.index_[0] not used)
-    mutable IndexSet is_;
+    //Indices, maximum of 8
+    IndexSet<Index> is_;
 
-    //mutable since e.g. scaleTo is logically const
-    mutable LogNumber scale_; 
+    //scale_ absorbs scalar factors to avoid copying ITDat
+    LogNumber scale_; 
 
     //
     //
     //////////////
 
     void 
-    initCounter(Counter& C) const;
-
-    void 
     allocate(int dim);
-
     void 
     allocate();
 
+    void 
+    allocateImag(int dim);
+    void 
+    allocateImag();
+
     //Disattach self from current ITDat and create own copy instead.
     //Necessary because ITensors logically represent distinct
-    //objects even though they may share data in reality.
+    //objects even though they may share data
     void 
-    solo() const;
+    solo();
+
+    void 
+    soloReal();
+
+    void 
+    soloImag();
+
+    void
+    equalizeScales(ITensor& other);
+
+    void
+    reshapeDat(const Permutation& P);
     
     friend struct ProductProps;
 
     friend void toMatrixProd(const ITensor& L, const ITensor& R, 
                              ProductProps& pp,
                              MatrixRefNoLink& lref, MatrixRefNoLink& rref,
-                             bool& L_is_matrix, bool& R_is_matrix);
-
-    void
-    directMultiply(const ITensor& other, ProductProps& pp, 
-                   int& new_rn_, boost::array<Index,NMAX+1>& new_index_);
-
-    int _ind(int i1, int i2, int i3, int i4, 
-             int i5, int i6, int i7, int i8) const;
+                             bool& L_is_matrix, bool& R_is_matrix, bool doReshape = true);
 
     int _ind2(const IndexVal& iv1, const IndexVal& iv2) const;
 
@@ -713,62 +523,38 @@ class ITensor
               const IndexVal& iv7 = IndexVal::Null(),const IndexVal& iv8 = IndexVal::Null())
         const;
 
+    friend class commaInit;
+
     friend class ITSparse;
 
     friend void 
     product(const ITSparse& S, const ITensor& T, ITensor& res);
 
-    public:
-
-    // The ITmaker constructor is for making constant, global
-    // ITensors and is not intended to be called by users,
-    // only internally by static ITensor methods
-    enum ITmaker { makeComplex_1, makeComplex_i, makeConjTensor };
-
-    ITensor(ITmaker itm);
-
     }; // class ITensor
 
-//
-// Counter
-//
-class Counter
+
+
+class commaInit
     {
-public:
-    boost::array<int,NMAX+1> n, i;
-    int ind;
-    int rn_,r_;
+    public:
 
-    Counter();
+    commaInit(ITensor& T,
+              const Index& i1,
+              const Index& i2 = Index::Null(),
+              const Index& i3 = Index::Null());
 
-    Counter(const boost::array<Index,NMAX+1>& ii,int rn,int r);
+    commaInit& operator<<(Real r);
 
-    Counter(const IndexSet& is);
+    commaInit& operator,(Real r);
 
-    void 
-    init(const boost::array<Index,NMAX+1>& ii, int rn, int r);
+    ~commaInit();
 
-    void 
-    init(const IndexSet& is);
+    private:
 
-    Counter& 
-    operator++();
-
-    bool 
-    operator!=(const Counter& other) const;
-
-    bool 
-    operator==(const Counter& other) const;
-
-    bool 
-    notDone() const 
-        { return i[1] != 0; }
-
-    friend std::ostream& 
-    operator<<(std::ostream& s, const Counter& c);
-
-    void 
-    reset(int a);
+    ITensor& T_;
+    bool started_;
+    Counter c_; 
+    Permutation P_;
 
     };
 
@@ -777,7 +563,7 @@ public:
 //
 class ITDat
     {
-public:
+    public:
 
     Vector v;
 
@@ -793,19 +579,14 @@ public:
     ITDat(Real r);
 
     explicit 
-    ITDat(std::istream& s);
-
-    explicit 
     ITDat(const ITDat& other);
+
+    void
+    read(std::istream& s);
 
     void 
     write(std::ostream& s) const;
     
-    void 
-    print() const 
-        { std::cout << "ITDat: v = " << v; }
-
-
 #ifdef ITENSOR_USE_ALLOCATOR
     void* operator 
     new(size_t) throw(std::bad_alloc)
@@ -824,65 +605,67 @@ public:
 
     friend class ITensor;
 
-    friend void 
-    intrusive_ptr_add_ref(ITDat* p);
-
-    friend void 
-    intrusive_ptr_release(ITDat* p);
-
-    int count() const { return numref; }
-
-private:
-
-    mutable unsigned int 
-    numref;
+    private:
 
     //Must be dynamically allocated:
     void operator=(const ITDat&);
-    ~ITDat() { }
 
 
     };
 
+ITensor inline
+operator*(ITensor A, const ITensor& B) { A *= B; return A; }
 
-class commaInit
-    {
-public:
-    commaInit(ITensor& T_)
-        : T(T_)
-        { 
-        if(T.isNull()) Error("Can't assign to null ITensor");
-        T.solo();
-        T.scaleTo(1);
-        T.initCounter(c);
-        }
+ITensor inline
+operator*(ITensor T, const IndexVal& iv) { T *= iv; return T; }
 
-    commaInit& operator<<(Real r)
-        {
-        return operator,(r);
-        }
+ITensor inline
+operator*(const IndexVal& iv, const ITensor& t) { return (ITensor(iv) *= t); }
 
-    commaInit& operator,(Real r)
-        {
-        if(c.notDone()) 
-            { T.p->v(c.ind) = r; ++c; }
-        else 
-            { Error("Comma assignment list too long.\n"); }
-        return *this;
-        }
+ITensor inline
+operator*(ITensor T, Real fac) { T *= fac; return T; }
 
-private:
-    ITensor& T;
-    Counter c; 
-    };
+ITensor inline
+operator*(Real fac, ITensor T) { T *= fac; return T; }
 
-template <typename Callable> void ITensor::
+ITensor inline
+operator/(ITensor T, Real fac) { T /= fac; return T; }
+
+ITensor inline
+operator*(ITensor T, Complex z) { T *= z; return T; }
+
+ITensor inline
+operator*(Complex z, ITensor T) { T *= z; return T; }
+
+ITensor inline
+operator*(ITensor T, LogNumber lgnum) { T *= lgnum; return T; }
+
+ITensor inline
+operator*(LogNumber lgnum, ITensor T) { T *= lgnum; return T; }
+
+ITensor inline
+operator/(ITensor A, const ITensor& B) { A /= B; return A; }
+
+ITensor inline
+operator+(ITensor A, const ITensor& B) { A += B; return A; }
+
+ITensor inline
+operator-(ITensor A, const ITensor& B) { A -= B; return A; }
+
+template <typename Callable> 
+ITensor& ITensor::
 mapElems(const Callable& f)
     {
     solo();
     scaleTo(1);
-    for(int j = 1; j <= p->v.Length(); ++j)
-        p->v(j) = f(p->v(j));
+    for(int j = 1; j <= r_->v.Length(); ++j)
+        r_->v(j) = f(r_->v(j));
+    if(i_)
+        {
+        for(int j = 1; j <= i_->v.Length(); ++j)
+            i_->v(j) = f(i_->v(j));
+        }
+    return *this;
     }
 
 //
@@ -897,42 +680,281 @@ Real
 Dot(const ITensor& x, const ITensor& y);
 
 //
-// Computes the scalar (inner) product of two
+// Scalar (inner) product of two
 // possibly complex ITensors.
 //
-// The first argument gets conjugated so this method
-// is equivalent to the ITensor contraction conj(x) * y 
-// except the result is two real numbers (re and im) 
-// instead of a rank 0 ITensor.
+// Conjugates the first argument, therefore
+// equivalent to the contraction conj(x) * y 
+// (except it yields two real numbers, re and im,
+// instead of a rank 0 ITensor).
 //
-void 
-BraKet(const ITensor& x, const ITensor& y, Real& re, Real& im);
+Complex 
+BraKet(const ITensor& x, const ITensor& y);
 
-inline ITensor 
+//
+// Define product of IndexVal iv1 = (I1,n1), iv2 = (I2,n2)
+// (I1, I2 are Index objects; n1,n2 are type int)
+// to be an ITensor T such that T(I1(n1),I2(n2)) == 1
+//
+// Useful for creating MPOs
+//
+ITensor inline
 operator*(const IndexVal& iv1, const IndexVal& iv2) 
     { ITensor t(iv1); return (t *= iv2); }
 
-inline ITensor 
-operator*(const IndexVal& iv1, Real fac) 
-    { return ITensor(iv1,fac); }
+//
+// Define product of IndexVal iv1 = (I1,n1) with a Real "val"
+// to be an ITensor T such that T(I1(n1)) == val
+//
+// Useful for creating MPOs
+//
+ITensor inline
+operator*(const IndexVal& iv1, Real val) 
+    { ITensor res(iv1); res *= val; return res; }
 
-inline ITensor 
-operator*(Real fac, const IndexVal& iv) 
-    { return ITensor(iv,fac); }
+ITensor inline
+operator*(Real val, const IndexVal& iv) 
+    { ITensor res(iv); res *= val; return res; }
 
-// Given Tensors which represent operators 
-//(e.g. A(site-1',site-1), B(site-1',site-1), 
-// Multiply them, fixing primes C(site-1',site-1)
-// a * b  (a above b in diagram, unprimed = right index of matrix)
-template<class Tensor>
-inline Tensor 
-multSiteOps(Tensor a, Tensor b) 
+
+template<class TensorA, class TensorB> typename 
+TensorA::IndexT
+commonIndex(const TensorA& A, const TensorB& B, IndexType t = All)
     {
-    a.mapprime(1,2,primeSite);
-    a.mapprime(0,1,primeSite);
-    Tensor res = a * b;
-    res.mapprime(2,1,primeSite);
-    return res;
+    typedef typename TensorA::IndexT
+    IndexT;
+    Foreach(const IndexT& I, A.indices())
+        {
+        if( (t == All || I.type() == t)
+         && hasindex(B.indices(),I) ) 
+            {
+            return I;
+            }
+        }
+    throw ITError("No common index found");
+    return IndexT::Null();
     }
+template<class TensorA, class TensorB> typename 
+TensorA::IndexT
+index_in_common(const TensorA& A, const TensorB& B, IndexType t = All)
+    {
+    static int depcount = 0;
+    if(++depcount < 5) 
+        Cout << "WARNING: index_in_common deprecated, use commonIndex instead" << Endl;
+    return commonIndex(A,B,t);
+    }
+
+template<class Tensor> typename
+Tensor::IndexT const&
+finddir(const Tensor& T, Arrow dir)
+    {
+    return finddir(T.indices(),dir);
+    }
+
+template<class Tensor> typename
+Tensor::IndexT const&
+findtype(const Tensor& T, IndexType type)
+    {
+    return findtype(T.indices(),type);
+    }
+
+template<class Tensor>
+bool
+hasindex(const Tensor& T, const typename Tensor::IndexT& I)
+    {
+    return hasindex(T.indices(),I);
+    }
+
+//
+// Given Tensors which represent operator matrices
+// (e.g. A(site1',site1), B(site1',site1) )
+// multiply them, automatically adjusting primeLevels
+// so that result is again an operator matrix C(site1',site1)
+//
+//              s'  t'
+//  s'  t'      |   |
+//  |   |       [-A-]
+//  [-C-]  =    |   |
+//  |   |       [-B-]
+//  s   t       |   |
+//              s   t
+//
+// (here s and t are indices of type Site)
+//
+template<class Tensor>
+Tensor
+multSiteOps(Tensor A, const Tensor& B) 
+    {
+    A.prime(Site);
+    A *= B;
+    A.mapprime(2,1,Site);
+    return A;
+    }
+
+//Return copy of ITensor with primeLevel of Index I increased by 1
+//(or optional amount inc)
+template <class Tensor, class IndexT>
+Tensor
+primed(Tensor A, const IndexT& I, int inc = 1)
+    { A.prime(I,inc); return A; }
+
+//Return copy of ITensor with primeLevel of Index I set to zero
+template <class Tensor, class IndexT>
+Tensor
+deprimed(Tensor A, const IndexT& I)
+    { A.noprime(I); return A; }
+
+//
+//Return copy of a tensor with primeLevels plev1 and plev2 swapped
+//
+//For example, if T has indices i,i' (like a matrix or a site
+//operator) then swapPrime(T,0,1) will have indices i',i 
+//i.e. the transpose of T.
+//
+template <class Tensor>
+Tensor
+swapPrime(Tensor T, int plev1, int plev2) 
+    { 
+    const int tempLevel = 100;
+#ifdef DEBUG
+    Foreach(const typename Tensor::IndexT& I, T.indices())
+        {
+        if(I.primeLevel() == tempLevel) 
+            {
+            Print(tempLevel);
+            Error("swapPrime fails if an index has primeLevel==tempLevel");
+            }
+        }
+#endif
+    T.mapprime(plev1,tempLevel);
+    T.mapprime(plev2,plev1);
+    T.mapprime(tempLevel,plev2);
+    return T; 
+    }
+
+template <class Tensor, class IndexT>
+Tensor
+tieIndices(Tensor T,
+           const IndexT& i1, const IndexT& i2, 
+           const IndexT& tied)
+    { 
+    T.tieIndices(i1,i2,tied); 
+    return T; 
+    }
+
+template <class Tensor, class IndexT>
+Tensor
+tieIndices(Tensor T,
+           const IndexT& i1, const IndexT& i2, 
+           const IndexT& i3, 
+           const IndexT& tied)
+    { 
+    T.tieIndices(i1,i2,i3,tied); 
+    return T; 
+    }
+
+template <class Tensor, class IndexT>
+Tensor
+tieIndices(Tensor T,
+           const IndexT& i1, const IndexT& i2, 
+           const IndexT& i3, const IndexT& i4, 
+           const IndexT& tied)
+    { 
+    T.tieIndices(i1,i2,i3,i4,tied); 
+    return T; 
+    }
+
+template <class Tensor>
+Tensor
+realPart(const Tensor& T)
+    {
+    if(!T.isComplex())
+        return T;
+    //else
+    Tensor re(T);
+    re.takeRealPart();
+    return re;
+    }
+
+template <class Tensor>
+Tensor
+imagPart(const Tensor& T)
+    {
+    Tensor im(T);
+    im.takeImagPart();
+    return im;
+    }
+
+//Returns true if T is exactly zero.
+//
+//If passed the option Opt("Fast",true),
+//only performs fast operations such as checking
+//the scale of T, but skips computing T's norm.
+//This can cause the return value to be true even
+//if T is actually zero.
+bool
+isZero(const ITensor& T, const OptSet& opts = Global::opts());
+
+//
+// Tracing over all indices results in a Real
+//
+template <class Tensor>
+Real
+trace(Tensor T)
+    {
+    if(T.isComplex())
+        {
+        Error("ITensor is complex, use trace(T,re,im)");
+        }
+    if(T.indices().rn() != 0) 
+        {
+        T.trace(T.indices(),T.indices().rn());
+        }
+    return T.toReal();
+    }
+
+template<class Tensor>
+void
+trace(const Tensor& T, Real& re, Real& im)
+    {
+    if(!T.isComplex())
+        {
+        re = trace(T);
+        im = 0;
+        }
+    else
+        {
+        re = trace(realPart(T));
+        im = trace(imagPart(T));
+        }
+    }
+
+template<class Tensor, class IndexT>
+Tensor
+trace(Tensor T, 
+      const IndexT& i1,
+      const IndexT& i2 = IndexT::Null(), 
+      const IndexT& i3 = IndexT::Null(), 
+      const IndexT& i4 = IndexT::Null(),
+      const IndexT& i5 = IndexT::Null(),
+      const IndexT& i6 = IndexT::Null(),
+      const IndexT& i7 = IndexT::Null(),
+      const IndexT& i8 = IndexT::Null())
+    { 
+    T.trace(i1,i2,i3,i4,i5,i6,i7,i8); 
+    return T; 
+    }
+
+int
+_ind(const IndexSet<Index>& is,
+     int i1, int i2, int i3, int i4, 
+     int i5, int i6, int i7, int i8);
+
+std::ostream& 
+operator<<(std::ostream & s, const ITensor& T);
+
+#undef Cout
+#undef Endl
+#undef Format
 
 #endif

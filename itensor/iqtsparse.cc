@@ -7,58 +7,33 @@
 using namespace std;
 using boost::format;
 using boost::array;
+//using boost::shared_ptr;
+//using boost::make_shared;
 
 //
 // IQTSDat
 //
 
-void 
-intrusive_ptr_add_ref(IQTSDat* p) 
-    { 
-    ++(p->numref); 
-    }
-
-void 
-intrusive_ptr_release(IQTSDat* p) 
-    { 
-    if(--(p->numref) == 0)
-        { 
-        delete p; 
-        } 
-    }
-
 IQTSDat::
 IQTSDat()
     :
-    numref(0),
     init(false)
     {
     }
 
-IQTSDat::
-IQTSDat(const IQTSDat& other)
-    :
-    numref(0),
-    init(false),
-    its_(other.its_)
+void IQTSDat::
+makeCopyOf(const IQTSDat& other)
     {
+    init = false;
+    its_ = other.its_;
     }
 
 IQTSDat::
 IQTSDat(istream& s)
     :
-    numref(0),
     init(false)
     {
     read(s);
-    }
-
-IQTSDat::
-IQTSDat(int init_numref)
-    :
-    numref(init_numref),
-    init(false)
-    {
     }
 
 void IQTSDat::
@@ -82,13 +57,6 @@ insert_add(const ITSparse& s)
 void IQTSDat::
 clear()
     {
-#ifdef DEBUG
-    if(numref > 1)
-        {
-        Print(numref);
-        Error("clear called on shared IQTSDat");
-        }
-#endif
     rmap.clear();
     its_.clear();
     }
@@ -107,13 +75,6 @@ init_rmap() const
 void IQTSDat::
 uninit_rmap() const
     {
-#ifdef DEBUG
-    if(numref > 1)
-        {
-        Print(numref);
-        Error("uninit_rmap called on shared IQTSDat");
-        }
-#endif
     rmap.clear();
     init = false;
     }
@@ -145,6 +106,12 @@ write(ostream& s) const
         { it->write(s); }
     }
 
+const boost::shared_ptr<IQTSDat>& IQTSDat::
+Null()
+    {
+    static boost::shared_ptr<IQTSDat> Null_ = boost::make_shared<IQTSDat>();
+    return Null_;
+    }
 
 //
 // IQTSparse
@@ -153,23 +120,23 @@ write(ostream& s) const
 IQTSparse::
 IQTSparse()
     :
-    is_(IQIndexSet::Null()),
+    is_(IndexSet<IQIndex>::Null()),
     d_(IQTSDat::Null())
     { }
 
 IQTSparse::
 IQTSparse(const IQIndex& i1)
     :
-    is_(new IQIndexSet(i1)),
-    d_(new IQTSDat())
+    is_(boost::make_shared<IndexSet<IQIndex> >(i1)),
+    d_(boost::make_shared<IQTSDat>())
     { 
     }
 
 IQTSparse::
 IQTSparse(const IQIndex& i1, const IQIndex& i2)
     :
-    is_(new IQIndexSet(i1,i2)),
-    d_(new IQTSDat())
+    is_(boost::make_shared<IndexSet<IQIndex> >(i1,i2)),
+    d_(boost::make_shared<IQTSDat>())
     { 
     }
 
@@ -177,8 +144,8 @@ IQTSparse::
 IQTSparse(const IQIndex& i1, const IQIndex& i2,
           Real r)
     :
-    is_(new IQIndexSet(i1,i2)),
-    d_(new IQTSDat())
+    is_(boost::make_shared<IndexSet<IQIndex> >(i1,i2)),
+    d_(boost::make_shared<IQTSDat>())
     { 
     if(i1.nindex() != i2.nindex())
         {
@@ -191,18 +158,53 @@ IQTSparse(const IQIndex& i1, const IQIndex& i2,
     }
 
 IQTSparse::
+IQTSparse(const IQIndex& i1, const IQIndex& i2,
+          const VectorRef& D)
+    :
+    is_(boost::make_shared<IndexSet<IQIndex> >(i1,i2)),
+    d_(boost::make_shared<IQTSDat>())
+    { 
+#ifdef DEBUG
+    if(i1.m() != i2.m() || i1.nindex() != i2.nindex())
+        {
+        Print(i1);
+        Print(i2);
+        Error("IQIndices must have same size and number of blocks");
+        }
+    if(D.Length() != i1.m())
+        {
+        Error("Incorrect size of Vector");
+        }
+#endif
+    int n = 1;
+    for(int j = 1; j <= i1.nindex(); ++j)
+        {
+        int bsize = i1.index(j).m();
+        operator+=(ITSparse(i1.index(j),i2.index(j),D.SubVector(n,n-1+bsize)));
+        n += bsize;
+        }
+    }
+
+IQTSparse::
 IQTSparse(const IQIndex& i1, const IQIndex& i2, const IQIndex& i3)
     :
-    is_(new IQIndexSet(i1,i2,i3)),
-    d_(new IQTSDat())
+    is_(boost::make_shared<IndexSet<IQIndex> >(i1,i2,i3)),
+    d_(boost::make_shared<IQTSDat>())
     { 
     }
 
 bool IQTSparse::
-isNull() const { return (d_ == IQTSDat::Null() || is_ == IQIndexSet::Null()); }
+isNull() const { return (d_ == IQTSDat::Null() || is_ == IndexSet<IQIndex>::Null()); }
 
 bool IQTSparse::
-isNotNull() const { return !(d_ == IQTSDat::Null() || is_ == IQIndexSet::Null()); }
+isComplex() const
+    {
+    Foreach(const ITSparse& t, blocks())
+        {
+        if(t.isComplex()) return true;
+        }
+    return false;
+    }
 
 
 IQTSparse& IQTSparse::
@@ -309,143 +311,88 @@ operator()(const IQIndexVal& iv1, const IQIndexVal& iv2,
 	}
     */
 
-IQIndex IQTSparse::
-findtype(IndexType t) const 
-    { 
-    if(is_ == 0)
-        {
-        Error("IQTSparse is null");
-        }
-    return is_->findtype(t); 
-    }
-
-bool IQTSparse::
-findtype(IndexType t, IQIndex& I) const 
-    { 
-    if(is_ == 0) return false;
-
-    return is_->findtype(t,I); 
-    }
-
-int IQTSparse::
-findindex(const IQIndex& I) const 
-    { 
-    if(is_ == 0)
-        {
-        Error("IQTSparse is null");
-        }
-    return is_->findindex(I); 
-    }
-
-bool IQTSparse::
-has_common_index(const IQTSparse& other) const
-    { 
-    if(is_ == 0) return false;
-
-    return is_->has_common_index(*other.is_); 
-    }
-
-bool IQTSparse::
-hasindex(const IQIndex& I) const 
-    { 
-    if(is_ == 0) return false;
-
-    return is_->hasindex(I); 
-    }
-
 //
 // Primelevel Methods 
 //
 
-void IQTSparse::
-noprime(PrimeType pt)
+IQTSparse& IQTSparse::
+noprime(IndexType type)
     { 
     solo();
 
-    is_->noprime(pt); 
+    is_->noprime(type); 
 
     Foreach(ITSparse& t, ncblocks())
         {
-        t.noprime(pt);
+        t.noprime(type);
         }
+    return *this;
     }
 
-void IQTSparse::
-doprime(PrimeType pt, int inc) 
+IQTSparse& IQTSparse::
+prime(IndexType type, int inc) 
     { 
     solo();
 
-    is_->doprime(pt,inc);
+    is_->prime(type,inc);
 
     Foreach(ITSparse& t, ncblocks())
         {
-        t.doprime(pt,inc);
+        t.prime(type,inc);
         }
+    return *this;
     }
 
-void IQTSparse::
-mapprime(int plevold, int plevnew, PrimeType pt)
+IQTSparse& IQTSparse::
+mapprime(int plevold, int plevnew, IndexType type)
     { 
     solo();
 
-    is_->mapprime(plevold,plevnew,pt); 
+    is_->mapprime(plevold,plevnew,type); 
 
     Foreach(ITSparse& t, ncblocks())
         {
-        t.mapprime(plevold,plevnew,pt);
+        t.mapprime(plevold,plevnew,type);
         }
+    return *this;
     }
 
-void IQTSparse::
-mapprimeind(const IQIndex& I, int plevold, int plevnew, 
-            PrimeType pt)
-    { 
-    solo();
-
-    is_->mapprimeind(I,plevold,plevnew,pt); 
-
-    Foreach(ITSparse& t, ncblocks())
-        {
-        t.mapprimeind(I,plevold,plevnew,pt);
-        }
-    }
-
-void IQTSparse::
-primeind(const IQIndex& I, int inc)
+IQTSparse& IQTSparse::
+prime(const IQIndex& I, int inc)
     {
     solo();
 
-    is_->primeind(I,inc);
+    is_->prime(I,inc);
 
     Foreach(ITSparse& t, ncblocks())
-    for(std::vector<inqn>::const_iterator x = I.iq().begin(); 
-            x != I.iq().end(); ++x)
+    Foreach(const Index& i, I.indices())
         {
-        if(t.hasindex(x->index))
-            t.primeind(x->index,inc);
+        if(hasindex(t,i))
+            t.prime(i,inc);
         }
+    return *this;
     }
 
-void IQTSparse::
-noprimeind(const IQIndex& I) 
+IQTSparse& IQTSparse::
+noprime(const IQIndex& I) 
     { 
     solo();
 
-    is_->noprimeind(I); 
+    is_->noprime(I); 
 
     Foreach(ITSparse& t, ncblocks())
-    for(std::vector<inqn>::const_iterator x = I.iq().begin(); 
-            x != I.iq().end(); ++x)
+    Foreach(const Index& i, I.indices())
         {
-        if(t.hasindex(x->index))
-            t.noprimeind(x->index);
+        if(hasindex(t,i))
+            t.noprime(i);
         }
+    return *this;
     }
 
 void IQTSparse::
 conj()
     {
-    if(!isComplex())
+    if(!this->isComplex())
         {
         soloIndex();
         is_->conj();
@@ -492,28 +439,6 @@ scaleTo(const LogNumber& newscale) const
     blocks().scaleTo(newscale);
 	}
 
-void IQTSparse::
-print(std::string name,Printdat pdat) const 
-	{ 
-    bool savep = Global::printdat();
-    Global::printdat() = (pdat==ShowData); 
-	std::cerr << "\n" << name << " =\n" << *this << "\n"; 
-    Global::printdat() = savep;
-	}
-
-void IQTSparse::
-printIndices(const std::string& name) const
-	{ 
-	cout << "\n" << name << " (IQIndices only) = \n";
-    if(this->isNull())
-        {
-        cout << "    [IQTSparse is null]" << endl;
-        return;
-        }
-	for(int j = 1; j <= is_->r(); ++j)
-	    cout << is_->index(j) << "\n\n";
-	cout << "---------------------------\n" << endl;
-	}
 
 void IQTSparse::
 read(std::istream& s)
@@ -522,8 +447,10 @@ read(std::istream& s)
     s.read((char*) &null_,sizeof(null_));
     if(null_) 
         { *this = IQTSparse(); return; }
-    is_ = new IQIndexSet(s);
-    d_ = new IQTSDat(s);
+    is_ = boost::make_shared<IndexSet<IQIndex> >();
+    is_->read(s);
+    d_ = boost::make_shared<IQTSDat>();
+    d_->read(s);
     }
 
 void IQTSparse::
@@ -544,20 +471,26 @@ soloDat()
         Error("IQTSparse is null");
         }
 
-	if(blocks().count() != 1)
+    if(!d_.unique())
 	    {
-        d_ = new IQTSDat(*d_);
+        const IQTSDat& old_dat(*d_);
+        d_ = boost::make_shared<IQTSDat>();
+        d_->makeCopyOf(old_dat);
 	    }
     }
 
 void IQTSparse::
 soloIndex()
     {
-	if(is_ == 0)
+	if(!is_)
         Error("IQTSparse is null");
 
-	if(is_->count() != 1)
-        is_ = new IQIndexSet(*is_);
+	if(!is_.unique())
+        {
+        const IndexSet<IQIndex>& old_is(*is_);
+        is_ = boost::make_shared<IndexSet<IQIndex> >();
+        *is_ = old_is;
+        }
     }
 
 void IQTSparse::
@@ -576,12 +509,6 @@ product(const IQTSparse& S, const IQTensor& T, IQTensor& res)
     if(T.isNull()) 
         Error("Multiplying by null IQTensor");
 
-    if(S.hasindex(IQIndex::IndReIm()) && T.hasindex(IQIndex::IndReIm()) && !T.hasindex(IQIndex::IndReImP())
-	    && !T.hasindex(IQIndex::IndReImPP()) && !S.hasindex(IQIndex::IndReImP()) && !S.hasindex(IQIndex::IndReImPP()))
-        {
-        Error("Complex IQTSparse not yet implemented");
-        }
-
     set<ApproxReal> common_inds;
     
     //Load iqindex_ with those IQIndex's *not* common to *this and other
@@ -596,17 +523,17 @@ product(const IQTSparse& S, const IQTensor& T, IQTensor& res)
             {
             //Check that arrow directions are compatible
             if(Global::checkArrows())
-                if(f->dir() == I.dir() && f->type() != ReIm && I.type() != ReIm)
+                if(f->dir() == I.dir())
                     {
-                    PrintIndices(S);
-                    PrintIndices(T);
+                    Print(S.indices());
+                    Print(T.indices());
                     cerr << "IQIndex from S = " << I << endl;
                     cerr << "IQIndex from T = " << *f << endl;
                     cout << "Incompatible arrow directions in IQTensor::operator*=" << endl;
                     throw ArrowError("Incompatible arrow directions in IQTensor::operator*=.");
                     }
-            for(size_t n = 0; n < I.iq().size(); ++n) 
-                { common_inds.insert(ApproxReal(I.iq()[n].index.uniqueReal())); }
+            Foreach(const Index& i, I.indices())
+                { common_inds.insert(ApproxReal(i.uniqueReal())); }
 
             common_inds.insert(ApproxReal(I.uniqueReal()));
             }
@@ -629,8 +556,8 @@ product(const IQTSparse& S, const IQTensor& T, IQTensor& res)
 
     set<ApproxReal> keys;
 
-    list<ITensor> old_itensor; 
-    res.p->swap(old_itensor);
+    IQTDat::StorageT old_itensor; 
+    res.dat.nc().swap(old_itensor);
 
     multimap<ApproxReal,IQTSDat::const_iterator> com_S;
     for(IQTSDat::const_iterator tt = S.blocks().begin(); tt != S.blocks().end(); ++tt)
@@ -645,14 +572,14 @@ product(const IQTSparse& S, const IQTensor& T, IQTensor& res)
         keys.insert(ApproxReal(r));
         }
 
-    multimap<ApproxReal,IQTensor::const_iten_it> com_T;
-    for(IQTensor::const_iten_it ot = T.const_iten_begin(); ot != T.const_iten_end(); ++ot)
+    multimap<ApproxReal,IQTDat::const_iterator> com_T;
+    for(IQTDat::const_iterator ot = T.blocks().begin(); ot != T.blocks().end(); ++ot)
         {
         Real r = 0.0;
-        for(int b = 1; b <= ot->r(); ++b)
+        Foreach(const Index& I, ot->indices())
             {
-            if(common_inds.count(ApproxReal(ot->index(b).uniqueReal())))
-                { r += ot->index(b).uniqueReal(); }
+            if(common_inds.count(ApproxReal(I.uniqueReal())))
+                { r += I.uniqueReal(); }
             }
         com_T.insert(make_pair(ApproxReal(r),ot));
         keys.insert(ApproxReal(r));
@@ -682,7 +609,7 @@ product(const IQTSparse& S, const IQTensor& T, IQTensor& res)
             //Multiply the ITensors and add into res
             tt = *(ll->second) * *(rr->second);
             if(tt.scale().sign() != 0)
-                res.p->insert_add(tt);
+                res.dat.nc().insert_add(tt);
             }
         }
 

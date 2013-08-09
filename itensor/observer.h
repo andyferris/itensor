@@ -4,23 +4,24 @@
 //
 #ifndef __ITENSOR_OBSERVER_H
 #define __ITENSOR_OBSERVER_H
-#include "svdworker.h"
-#include "option.h"
+
+#include "spectrum.h"
 
 // virtual base class
+
+class SVDWorker;
 
 class Observer 
     {
     public:
     
     void virtual
-    measure(int sw, int ha, int b, const SVDWorker& svd, Real energy,
-            const Option& opt1 = Option(), const Option& opt2 = Option(),
-            const Option& opt3 = Option(), const Option& opt4 = Option()) = 0;
+    measure(int N, int sw, int ha, int b, const Spectrum& spec, Real energy,
+            const OptSet& opts = Global::opts()) = 0;
     
     bool virtual
-    checkDone(int sw, const SVDWorker& svd, Real energy, 
-              const Option& opt1 = Option(), const Option& opt2 = Option()) = 0;
+    checkDone(int sw, Real energy, 
+              const OptSet& opts = Global::opts()) = 0;
 
     virtual ~Observer() { }
 

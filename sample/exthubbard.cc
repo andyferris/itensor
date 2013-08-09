@@ -47,7 +47,11 @@ int main(int argc, char* argv[])
     // IQTensors, tensors whose indices are sorted
     // with respect to quantum numbers
     //
-    IQMPO H = ExtendedHubbard(model,U,t1,t2,V1);
+    IQMPO H = ExtendedHubbard(model,
+                              Opt("U",U)
+                              & Opt("t1",t1)
+                              & Opt("t2",t2)
+                              & Opt("V1",V1));
 
     //
     // Set the initial wavefunction matrix product state
@@ -92,8 +96,8 @@ int main(int argc, char* argv[])
     for(int j = 1; j <= N; ++j)
         {
         psi.position(j);
-        upd(j) = Dot(conj(primesite(psi.AA(j))),model.Nup(j)*psi.AA(j));
-        dnd(j) = Dot(conj(primesite(psi.AA(j))),model.Ndn(j)*psi.AA(j));
+        upd(j) = Dot(conj(primed(psi.AA(j),Site)),model.Nup(j)*psi.AA(j));
+        dnd(j) = Dot(conj(primed(psi.AA(j),Site)),model.Ndn(j)*psi.AA(j));
         }
 
     cout << "Up Density:" << endl;

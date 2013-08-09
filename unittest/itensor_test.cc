@@ -2,6 +2,8 @@
 #include "itensor.h"
 #include <boost/test/unit_test.hpp>
 
+using namespace std;
+
 struct ITensorDefaults
     {
     Index s1,s2,s3,s4,
@@ -12,8 +14,9 @@ struct ITensorDefaults
 
     ITensor A,B,X,Z;
 
-    std::vector<Index> mixed_inds, reordered_mixed_inds;
+    IndexSet<Index> mixed_inds;
 
+    const
     int mixed_inds_dim;
 
     ITensorDefaults() :
@@ -21,10 +24,10 @@ struct ITensorDefaults
     s2(Index("s2",2,Site)),
     s3(Index("s3",2,Site)),
     s4(Index("s4",2,Site)),
-    s1P(s1.primed()),
-    s2P(s2.primed()),
-    s3P(s3.primed()),
-    s4P(s4.primed()),
+    s1P(primed(s1)),
+    s2P(primed(s2)),
+    s3P(primed(s3)),
+    s4P(primed(s4)),
     l1(Index("l1",2)),
     l2(Index("l2",2)),
     l3(Index("l3",2)),
@@ -41,9 +44,9 @@ struct ITensorDefaults
     b3(Index("b3",3)),
     b4(Index("b4",4)),
     b5(Index("b5",5)),
-    mixed_inds(6),
-    reordered_mixed_inds(6),
-    mixed_inds_dim(1)
+    mixed_inds(a2,b3,l1,l2,a4,l4),
+    //reordered_mixed_inds(6),
+    mixed_inds_dim(mixed_inds.dim())
     {
         {
         Matrix M(s1.m(),s2.m());
@@ -73,22 +76,12 @@ struct ITensorDefaults
         Z = ITensor(s1,s2,M);
         }
 
-        mixed_inds[0] = a2;
-        mixed_inds[1] = b3;
-        mixed_inds[2] = l1;
-        mixed_inds[3] = l2;
-        mixed_inds[4] = a4;
-        mixed_inds[5] = l4;
-
-        Foreach(const Index& I, mixed_inds)
-        { mixed_inds_dim *= I.m(); }
-
-        reordered_mixed_inds[0] = a2;
-        reordered_mixed_inds[1] = l1;
-        reordered_mixed_inds[2] = b3;
-        reordered_mixed_inds[3] = a4;
-        reordered_mixed_inds[4] = l4;
-        reordered_mixed_inds[5] = l2;
+        //reordered_mixed_inds[0] = a2;
+        //reordered_mixed_inds[1] = l1;
+        //reordered_mixed_inds[2] = b3;
+        //reordered_mixed_inds[3] = a4;
+        //reordered_mixed_inds[4] = l4;
+        //reordered_mixed_inds[5] = l2;
     }
 
     ~ITensorDefaults() { }
@@ -105,7 +98,7 @@ TEST(Null)
 
     ITensor t2(s1);
 
-    CHECK(t2.isNotNull());
+    CHECK(!t2.isNull());
 }
 
 TEST(Constructors)
@@ -113,54 +106,54 @@ TEST(Constructors)
     ITensor t1(l1);
 
     CHECK_EQUAL(t1.r(),1);
-    CHECK(t1.hasindex(l1));
+    CHECK(hasindex(t1,l1));
     CHECK_CLOSE(t1.norm(),0,1E-10);
 
     ITensor t2(l1,l2);
 
     CHECK_EQUAL(t2.r(),2);
-    CHECK(t2.hasindex(l1));
-    CHECK(t2.hasindex(l2));
+    CHECK(hasindex(t2,l1));
+    CHECK(hasindex(t2,l2));
     CHECK_CLOSE(t2.norm(),0,1E-10);
 
     ITensor t3(l1,l2,l3);
 
     CHECK_EQUAL(t3.r(),3);
-    CHECK(t3.hasindex(l1));
-    CHECK(t3.hasindex(l2));
-    CHECK(t3.hasindex(l3));
+    CHECK(hasindex(t3,l1));
+    CHECK(hasindex(t3,l2));
+    CHECK(hasindex(t3,l3));
     CHECK_CLOSE(t3.norm(),0,1E-10);
 
     ITensor t4(a1,l1);
 
     CHECK_EQUAL(t4.r(),2);
-    CHECK(t4.hasindex(a1));
-    CHECK(t4.hasindex(l1));
+    CHECK(hasindex(t4,a1));
+    CHECK(hasindex(t4,l1));
     CHECK_CLOSE(t4.norm(),0,1E-10);
 
     ITensor t5(l1,a1,l2);
 
     CHECK_EQUAL(t5.r(),3);
-    CHECK(t5.hasindex(a1));
-    CHECK(t5.hasindex(l1));
-    CHECK(t5.hasindex(l2));
+    CHECK(hasindex(t5,a1));
+    CHECK(hasindex(t5,l1));
+    CHECK(hasindex(t5,l2));
     CHECK_CLOSE(t5.norm(),0,1E-10);
 
     ITensor t6(l1,a1,l2,a2);
 
     CHECK_EQUAL(t6.r(),4);
-    CHECK(t6.hasindex(l1));
-    CHECK(t6.hasindex(a1));
-    CHECK(t6.hasindex(l2));
-    CHECK(t6.hasindex(a2));
+    CHECK(hasindex(t6,l1));
+    CHECK(hasindex(t6,a1));
+    CHECK(hasindex(t6,l2));
+    CHECK(hasindex(t6,a2));
     CHECK_CLOSE(t6.norm(),0,1E-10);
 
     Real a = ran1();
     ITensor t7(l1,l2,a);
 
     CHECK_EQUAL(t7.r(),2);
-    CHECK(t7.hasindex(l1));
-    CHECK(t7.hasindex(l2));
+    CHECK(hasindex(t7,l1));
+    CHECK(hasindex(t7,l2));
     CHECK_CLOSE(t7(l1(1),l2(1)),a,1E-10);
     CHECK_CLOSE(t7(l1(1),l2(2)),0,1E-10);
     CHECK_CLOSE(t7(l1(2),l2(1)),0,1E-10);
@@ -173,8 +166,8 @@ TEST(Constructors)
     ITensor t8(l1,b3,M);
 
     CHECK_EQUAL(t8.r(),2);
-    CHECK(t8.hasindex(l1));
-    CHECK(t8.hasindex(b3));
+    CHECK(hasindex(t8,l1));
+    CHECK(hasindex(t8,b3));
     CHECK_CLOSE(t8(l1(1),b3(1)),11,1E-10);
     CHECK_CLOSE(t8(l1(1),b3(2)),12,1E-10);
     CHECK_CLOSE(t8(l1(1),b3(3)),13,1E-10);
@@ -187,8 +180,8 @@ TEST(Constructors)
     ITensor t85(b3,l1,M.t());
 
     CHECK_EQUAL(t85.r(),2);
-    CHECK(t85.hasindex(l1));
-    CHECK(t85.hasindex(b3));
+    CHECK(hasindex(t85,l1));
+    CHECK(hasindex(t85,b3));
     CHECK_CLOSE(t85(l1(1),b3(1)),11,1E-10);
     CHECK_CLOSE(t85(l1(1),b3(2)),12,1E-10);
     CHECK_CLOSE(t85(l1(1),b3(3)),13,1E-10);
@@ -203,8 +196,8 @@ TEST(Constructors)
     ITensor w1(a1,l2,W);
 
     CHECK_EQUAL(w1.r(),2);
-    CHECK(w1.hasindex(a1));
-    CHECK(w1.hasindex(l2));
+    CHECK(hasindex(w1,a1));
+    CHECK(hasindex(w1,l2));
     CHECK_CLOSE(w1(l2(1)),W(1,1),1E-10);
     CHECK_CLOSE(w1(l2(2)),W(1,2),1E-10);
     CHECK_CLOSE(w1.sumels(),W.TreatAsVector().sumels(),1E-10);
@@ -213,8 +206,8 @@ TEST(Constructors)
     ITensor w2(l2,a1,W.t());
 
     CHECK_EQUAL(w2.r(),2);
-    CHECK(w2.hasindex(a1));
-    CHECK(w2.hasindex(l2));
+    CHECK(hasindex(w2,a1));
+    CHECK(hasindex(w2,l2));
     CHECK_CLOSE(w2(l2(1)),W(1,1),1E-10);
     CHECK_CLOSE(w2(l2(2)),W(1,2),1E-10);
     CHECK_CLOSE(w2.sumels(),W.TreatAsVector().sumels(),1E-10);
@@ -231,17 +224,17 @@ TEST(Constructors)
     ITensor t10(linkind,V);
 
     CHECK_EQUAL(t10.r(),1);
-    CHECK(t10.hasindex(linkind));
+    CHECK(hasindex(t10,linkind));
     CHECK_CLOSE(t10.sumels(),V.sumels(),1E-10);
     CHECK_CLOSE(t10.norm(),Norm(V),1E-10);
 }
 
 TEST(IndexValConstructors)
-{
+    {
     ITensor t1(l1(2));
 
     CHECK_EQUAL(t1.r(),1);
-    CHECK(t1.hasindex(l1));
+    CHECK(hasindex(t1,l1));
     CHECK_CLOSE(t1(l1(1)),0,1E-10);
     CHECK_CLOSE(t1(l1(2)),1,1E-10);
     CHECK_CLOSE(t1.sumels(),1,1E-10);
@@ -250,8 +243,8 @@ TEST(IndexValConstructors)
     ITensor t2(l1(2),l2(1));
 
     CHECK_EQUAL(t2.r(),2);
-    CHECK(t2.hasindex(l1));
-    CHECK(t2.hasindex(l2));
+    CHECK(hasindex(t2,l1));
+    CHECK(hasindex(t2,l2));
     CHECK_CLOSE(t2(l1(1),l2(1)),0,1E-10);
     CHECK_CLOSE(t2(l1(1),l2(2)),0,1E-10);
     CHECK_CLOSE(t2(l1(2),l2(1)),1,1E-10);
@@ -262,8 +255,8 @@ TEST(IndexValConstructors)
     ITensor u2a(a1(1),l2(2));
 
     CHECK_EQUAL(u2a.r(),2);
-    CHECK(u2a.hasindex(a1));
-    CHECK(u2a.hasindex(l2));
+    CHECK(hasindex(u2a,a1));
+    CHECK(hasindex(u2a,l2));
     CHECK_CLOSE(u2a(l2(1)),0,1E-10);
     CHECK_CLOSE(u2a(l2(2)),1,1E-10);
     CHECK_CLOSE(u2a.sumels(),1,1E-10);
@@ -272,8 +265,8 @@ TEST(IndexValConstructors)
     ITensor u2b(l1(2),a2(1));
 
     CHECK_EQUAL(u2b.r(),2);
-    CHECK(u2b.hasindex(l1));
-    CHECK(u2b.hasindex(a2));
+    CHECK(hasindex(u2b,l1));
+    CHECK(hasindex(u2b,a2));
     CHECK_CLOSE(u2b(l1(1)),0,1E-10);
     CHECK_CLOSE(u2b(l1(2)),1,1E-10);
     CHECK_CLOSE(u2b.sumels(),1,1E-10);
@@ -282,9 +275,9 @@ TEST(IndexValConstructors)
     ITensor t3(l1(2),l3(1),l2(1));
 
     CHECK_EQUAL(t3.r(),3);
-    CHECK(t3.hasindex(l1));
-    CHECK(t3.hasindex(l2));
-    CHECK(t3.hasindex(l3));
+    CHECK(hasindex(t3,l1));
+    CHECK(hasindex(t3,l2));
+    CHECK(hasindex(t3,l3));
     CHECK_CLOSE(t3(l1(1),l3(1),l2(1)),0,1E-10);
     CHECK_CLOSE(t3(l1(2),l3(1),l2(1)),1,1E-10);
     CHECK_CLOSE(t3(l1(1),l3(2),l2(1)),0,1E-10);
@@ -299,32 +292,56 @@ TEST(IndexValConstructors)
     ITensor t4(a1(1),l3(2),l2(1));
 
     CHECK_EQUAL(t4.r(),3);
-    CHECK(t4.hasindex(a1));
-    CHECK(t4.hasindex(l2));
-    CHECK(t4.hasindex(l3));
+    CHECK(hasindex(t4,a1));
+    CHECK(hasindex(t4,l2));
+    CHECK(hasindex(t4,l3));
     CHECK_CLOSE(t4(l3(1),l2(1)),0,1E-10);
     CHECK_CLOSE(t4(l3(1),l2(2)),0,1E-10);
     CHECK_CLOSE(t4(l3(2),l2(1)),1,1E-10);
     CHECK_CLOSE(t4(l3(2),l2(2)),0,1E-10);
     CHECK_CLOSE(t4.sumels(),1,1E-10);
     CHECK_CLOSE(t4.norm(),1,1E-10);
-}
+
+    ITensor r4(l1(1),l3(1),l2(2),l4(1));
+
+    CHECK_EQUAL(r4.r(),4);
+    CHECK(hasindex(r4,l1));
+    CHECK(hasindex(r4,l2));
+    CHECK(hasindex(r4,l3));
+    CHECK(hasindex(r4,l4));
+    CHECK_CLOSE(r4(l1(1),l3(1),l2(2),l4(1)),1,1E-10);
+    CHECK_CLOSE(r4.sumels(),1,1E-10);
+    CHECK_CLOSE(r4.norm(),1,1E-10);
+
+    ITensor t8(l1(1),l2(2),l3(1),l4(2),l5(1),l6(2),l7(1),l8(2));
+
+    CHECK_EQUAL(t8.r(),8);
+    CHECK(hasindex(t8,l1));
+    CHECK(hasindex(t8,l2));
+    CHECK(hasindex(t8,l3));
+    CHECK(hasindex(t8,l4));
+    CHECK(hasindex(t8,l5));
+    CHECK(hasindex(t8,l6));
+    CHECK(hasindex(t8,l7));
+    CHECK(hasindex(t8,l8));
+
+    CHECK_CLOSE(t8(l1(1),l2(2),l3(1),l4(2),l5(1),l6(2),l7(1),l8(2)),1,1E-10);
+    CHECK_CLOSE(t8.norm(),1,1E-10);
+
+    }
 
 TEST(MultiIndexConstructors)
-{
-    std::vector<Index> indices(4);
-    indices[0] = a2;
-    indices[1] = l3;
-    indices[2] = l1;
-    indices[3] = a4;
+    {
+    const
+    IndexSet<Index> indices(a2,l3,l1,a4);
 
     ITensor t1(indices);
 
     CHECK_EQUAL(t1.r(),4);
-    CHECK(t1.hasindex(a2));
-    CHECK(t1.hasindex(l3));
-    CHECK(t1.hasindex(l1));
-    CHECK(t1.hasindex(a4));
+    CHECK(hasindex(t1,a2));
+    CHECK(hasindex(t1,l3));
+    CHECK(hasindex(t1,l1));
+    CHECK(hasindex(t1,a4));
     CHECK_CLOSE(t1.norm(),0,1E-10);
 
     Vector V(l1.m()*l3.m());
@@ -333,21 +350,18 @@ TEST(MultiIndexConstructors)
     ITensor t2(indices,V);
 
     CHECK_EQUAL(t2.r(),4);
-    CHECK(t2.hasindex(a2));
-    CHECK(t2.hasindex(l3));
-    CHECK(t2.hasindex(l1));
-    CHECK(t2.hasindex(a4));
+    CHECK(hasindex(t2,a2));
+    CHECK(hasindex(t2,l3));
+    CHECK(hasindex(t2,l1));
+    CHECK(hasindex(t2,a4));
     CHECK_CLOSE(t2.norm(),Norm(V),1E-10);
     CHECK_CLOSE(t2.sumels(),V.sumels(),1E-10);
-}
+    }
 
 TEST(ITensorConstructors)
 {
     Index clink("clink",4);
-    std::vector<Index> indices1(3);
-    indices1.at(0) = l1;
-    indices1.at(1) = l2;
-    indices1.at(2) = clink;
+    IndexSet<Index> indices1(l1,l2,clink);
 
     Vector V(l1.m()*l2.m()*clink.m());
     V.Randomize();
@@ -359,11 +373,7 @@ TEST(ITensorConstructors)
     ITensor t2(t1);
     t2 *= f;
 
-    std::vector<Index> indices3(4);
-    indices3.at(0) = l1;
-    indices3.at(1) = l2;
-    indices3.at(2) = l3;
-    indices3.at(3) = l4;
+    IndexSet<Index> indices3(l1,l2,l3,l4);
 
     ITensor t3(indices3,t2);
 
@@ -379,15 +389,11 @@ TEST(ITensorConstructors)
     }
 
     Permutation P;
-    P.from_to(2,4);
-    P.from_to(4,2);
+    P.fromTo(2,4);
+    P.fromTo(4,2);
     CHECK(P.check(4));
 
-    std::vector<Index> indices5(4);
-    indices5.at(0) = l1;
-    indices5.at(1) = l4;
-    indices5.at(2) = l3;
-    indices5.at(3) = l2;
+    IndexSet<Index> indices5(l1,l4,l3,l2);
 
     ITensor t4(t3);
     Real f2 = ran1();
@@ -408,11 +414,7 @@ TEST(ITensorConstructors)
 
 TEST(Copy)
 {
-    std::vector<Index> indices(4);
-    indices[0] = a2;
-    indices[1] = l3;
-    indices[2] = l1;
-    indices[3] = a4;
+    IndexSet<Index> indices(a2,l3,l1,a4);
 
     Vector V(l1.m()*l3.m());
     V.Randomize();
@@ -420,10 +422,10 @@ TEST(Copy)
     ITensor t1(indices,V);
 
     CHECK_EQUAL(t1.r(),4);
-    CHECK(t1.hasindex(a2));
-    CHECK(t1.hasindex(l3));
-    CHECK(t1.hasindex(l1));
-    CHECK(t1.hasindex(a4));
+    CHECK(hasindex(t1,a2));
+    CHECK(hasindex(t1,l3));
+    CHECK(hasindex(t1,l1));
+    CHECK(hasindex(t1,a4));
     CHECK_CLOSE(t1.norm(),Norm(V),1E-10);
     CHECK_CLOSE(t1.sumels(),V.sumels(),1E-10);
 
@@ -432,10 +434,10 @@ TEST(Copy)
     t1 = ITensor(); //destroy t1
 
     CHECK_EQUAL(t2.r(),4);
-    CHECK(t2.hasindex(a2));
-    CHECK(t2.hasindex(l3));
-    CHECK(t2.hasindex(l1));
-    CHECK(t2.hasindex(a4));
+    CHECK(hasindex(t2,a2));
+    CHECK(hasindex(t2,l3));
+    CHECK(hasindex(t2,l1));
+    CHECK(hasindex(t2,a4));
     CHECK_CLOSE(t2.norm(),Norm(V),1E-10);
     CHECK_CLOSE(t2.sumels(),V.sumels(),1E-10);
 
@@ -444,10 +446,10 @@ TEST(Copy)
     t2 = ITensor(); //destroy t2
 
     CHECK_EQUAL(t3.r(),4);
-    CHECK(t3.hasindex(a2));
-    CHECK(t3.hasindex(l3));
-    CHECK(t3.hasindex(l1));
-    CHECK(t3.hasindex(a4));
+    CHECK(hasindex(t3,a2));
+    CHECK(hasindex(t3,l3));
+    CHECK(hasindex(t3,l1));
+    CHECK(hasindex(t3,a4));
     CHECK_CLOSE(t3.norm(),Norm(V),1E-10);
     CHECK_CLOSE(t3.sumels(),V.sumels(),1E-10);
 }
@@ -474,22 +476,20 @@ TEST(ScalarMultiply)
     CHECK_CLOSE(B(s1(2),s2(2)),220/f,1E-10);
 }
 
+/*
 TEST(assignToVec)
 {
     Vector V(l1.m()*l2.m()*l3.m());
     V.Randomize();
     Real f = -ran1();
 
-    std::vector<Index> indices; indices.reserve(3);
-    indices.push_back(l1);
-    indices.push_back(l2);
-    indices.push_back(l3);
+    IndexSet<Index> indices(l1,l2,l3);
 
     ITensor T(indices,V);
 
     T *= f;
 
-    Vector U(T.vecSize()); T.assignToVec(U);
+    Vector U(T.indices().dim()); T.assignToVec(U);
 
     CHECK_EQUAL(U.Length(),V.Length());
 
@@ -497,6 +497,7 @@ TEST(assignToVec)
     { CHECK_CLOSE(U(j),V(j)*f,1E-10); }
 
 }
+*/
 
 TEST(MapElems)
     {
@@ -522,37 +523,59 @@ TEST(MapElems)
         }
     }
 
-TEST(reshape)
-{
+/*
+TEST(reshapeDat)
+    {
     Permutation P;
-    P.from_to(1,2);
-    P.from_to(2,1);
+    P.fromTo(1,2);
+    P.fromTo(2,1);
 
     Real f = -5;
     A *= f;
 
-    A.reshape(P);
+    A.reshapeDat(P);
 
     CHECK_CLOSE(A(s1(1),s2(1)),11*f,1E-10);
     CHECK_CLOSE(A(s1(1),s2(2)),21*f,1E-10);
     CHECK_CLOSE(A(s1(2),s2(1)),12*f,1E-10);
     CHECK_CLOSE(A(s1(2),s2(2)),22*f,1E-10);
 
-}
-
-TEST(findindex)
-{
-    ITensor T(mixed_inds);
-
-    boost::array<int,6> arb_order = {{ 3, 4, 1, 0, 2, 5 }};
-
-    Foreach(int i, arb_order)
-    {
-        int j = T.findindex(mixed_inds.at(i));
-        CHECK_EQUAL(T.index(j),mixed_inds.at(i));
     }
+    */
 
-}
+/*
+TEST(reshape)
+    {
+    //cout << "Begin: reshape -------------" << endl;
+    Permutation P;
+    P.fromTo(1,2);
+    P.fromTo(2,1);
+
+    Real f = -5;
+    A *= f;
+
+    CHECK_CLOSE(A(s1(1),s2(1)),11*f,1E-10);
+    CHECK_CLOSE(A(s1(1),s2(2)),12*f,1E-10);
+    CHECK_CLOSE(A(s1(2),s2(1)),21*f,1E-10);
+    CHECK_CLOSE(A(s1(2),s2(2)),22*f,1E-10);
+
+    ITensor cA(A);
+    cA.reshape(P);
+
+    //Check that indices are re-ordered...
+    CHECK(A.index(1) == cA.index(P.dest(1)));
+    CHECK(A.index(2) == cA.index(P.dest(2)));
+
+    //...but cA is equivalent to A apart from
+    //Index order:
+    CHECK_CLOSE(cA(s1(1),s2(1)),A(s1(1),s2(1)),1E-10);
+    CHECK_CLOSE(cA(s1(1),s2(2)),A(s1(1),s2(2)),1E-10);
+    CHECK_CLOSE(cA(s1(2),s2(1)),A(s1(2),s2(1)),1E-10);
+    CHECK_CLOSE(cA(s1(2),s2(2)),A(s1(2),s2(2)),1E-10);
+
+    //cout << "End: reshape ---------------" << endl;
+    }
+    */
 
 TEST(SumDifference)
 {
@@ -565,12 +588,12 @@ TEST(SumDifference)
     Real f1 = -ran1(), f2 = 0.1*f1;
 
     ITensor r = f1*v + w/f2; 
-    Vector R(r.vecSize()); r.assignToVec(R);
+    Vector R(r.indices().dim()); r.assignToVec(R);
     for(int j = 1; j < R.Length(); ++j)
     { CHECK_CLOSE(R(j),f1*V(j)+W(j)/f2,1E-10); }
 
     ITensor d(v); d -= w;
-    Vector D(d.vecSize()); d.assignToVec(D);
+    Vector D(d.indices().dim()); d.assignToVec(D);
     for(int j = 1; j < D.Length(); ++j)
     { CHECK_CLOSE(D(j),V(j)-W(j),1E-10); }
 
@@ -579,7 +602,7 @@ TEST(SumDifference)
     ZZ.Randomize();
 
     f1 = 1; f2 = 1;
-    ITensor yy(mixed_inds,YY), zz(reordered_mixed_inds,ZZ);
+    ITensor yy(mixed_inds,YY), zz(mixed_inds,ZZ);
     r = f1*yy + f2*zz;
     for(int j1 = 1; j1 <= 2; ++j1)
     for(int j2 = 1; j2 <= 2; ++j2)
@@ -601,7 +624,7 @@ TEST(ContractingProduct)
     {
     Real f = ran1();
     ITensor rZ(f), T(b2,a1,b4);
-    T.Randomize();
+    T.randomize();
 
     ITensor res = rZ * T;
 
@@ -619,7 +642,7 @@ TEST(ContractingProduct)
     //More general case
     ITensor L(b4,a1,b3,a2,b2), R(b5,a1,b4,b2,b3);
 
-    L.Randomize(); R.Randomize();
+    L.randomize(); R.randomize();
 
     Real fL = ran1(), fR = ran1();
     ITensor Lf = L * fL;
@@ -627,12 +650,12 @@ TEST(ContractingProduct)
 
     ITensor res1 = Lf*Rf;
 
-    CHECK(res1.hasindex(b5));
-    CHECK(res1.hasindex(a2));
-    CHECK(!res1.hasindex(a1));
-    CHECK(!res1.hasindex(b2));
-    CHECK(!res1.hasindex(b3));
-    CHECK(!res1.hasindex(b4));
+    CHECK(hasindex(res1,b5));
+    CHECK(hasindex(res1,a2));
+    CHECK(!hasindex(res1,a1));
+    CHECK(!hasindex(res1,b2));
+    CHECK(!hasindex(res1,b3));
+    CHECK(!hasindex(res1,b4));
 
     CHECK_EQUAL(res1.r(),2);
 
@@ -650,12 +673,12 @@ TEST(ContractingProduct)
 
     ITensor res2 = R*L;
 
-    CHECK(res2.hasindex(b5));
-    CHECK(res2.hasindex(a2));
-    CHECK(!res2.hasindex(a1));
-    CHECK(!res2.hasindex(b2));
-    CHECK(!res2.hasindex(b3));
-    CHECK(!res2.hasindex(b4));
+    CHECK(hasindex(res2,b5));
+    CHECK(hasindex(res2,a2));
+    CHECK(!hasindex(res2,a1));
+    CHECK(!hasindex(res2,b2));
+    CHECK(!hasindex(res2,b3));
+    CHECK(!hasindex(res2,b4));
 
     CHECK_EQUAL(res2.r(),2);
 
@@ -673,7 +696,7 @@ TEST(ContractingProduct)
 
     ITensor Q(a1,b4,a2,b2), P(a2,a3,a1);
 
-    Q.Randomize(); P.Randomize();
+    Q.randomize(); P.randomize();
 
     Real fQ = ran1(), fP = ran1();
     ITensor Qf = Q * fQ;
@@ -681,11 +704,11 @@ TEST(ContractingProduct)
 
     ITensor res3 = Qf*Pf;
 
-    CHECK(res3.hasindex(b4));
-    CHECK(res3.hasindex(b2));
-    CHECK(res3.hasindex(a3));
-    CHECK(!res3.hasindex(a1));
-    CHECK(!res3.hasindex(a2));
+    CHECK(hasindex(res3,b4));
+    CHECK(hasindex(res3,b2));
+    CHECK(hasindex(res3,a3));
+    CHECK(!hasindex(res3,a1));
+    CHECK(!hasindex(res3,a2));
 
     CHECK_EQUAL(res3.r(),3);
 
@@ -698,11 +721,11 @@ TEST(ContractingProduct)
 
     ITensor res4 = Pf*Qf;
 
-    CHECK(res4.hasindex(b4));
-    CHECK(res4.hasindex(b2));
-    CHECK(res4.hasindex(a3));
-    CHECK(!res4.hasindex(a1));
-    CHECK(!res4.hasindex(a2));
+    CHECK(hasindex(res4,b4));
+    CHECK(hasindex(res4,b2));
+    CHECK(hasindex(res4,a3));
+    CHECK(!hasindex(res4,a1));
+    CHECK(!hasindex(res4,a2));
 
     CHECK_EQUAL(res4.r(),3);
 
@@ -714,25 +737,25 @@ TEST(ContractingProduct)
         }
 
 
-    ITensor psi(a1,a2,a3), mpoh(l2,a1,a1.primed(),a2,a2.primed());
-    psi.Randomize(); mpoh.Randomize();
+    ITensor psi(a1,a2,a3), mpoh(l2,a1,primed(a1),a2,primed(a2));
+    psi.randomize(); mpoh.randomize();
 
     ITensor Hpsi = mpoh * psi;
 
     CHECK_EQUAL(Hpsi.r(),4);
-    CHECK(Hpsi.hasindex(l2));
-    CHECK(Hpsi.hasindex(a1.primed()));
-    CHECK(Hpsi.hasindex(a2.primed()));
-    CHECK(Hpsi.hasindex(a3));
-    CHECK(!Hpsi.hasindex(a1));
-    CHECK(!Hpsi.hasindex(a2));
+    CHECK(hasindex(Hpsi,l2));
+    CHECK(hasindex(Hpsi,primed(a1)));
+    CHECK(hasindex(Hpsi,primed(a2)));
+    CHECK(hasindex(Hpsi,a3));
+    CHECK(!hasindex(Hpsi,a1));
+    CHECK(!hasindex(Hpsi,a2));
     }
 
 TEST(NonContractingProduct)
-{
+    {
     ITensor L(b2,a1,b3,b4), R(a1,b3,a2,b5,b4);
 
-    L.Randomize(); R.Randomize();
+    L.randomize(); R.randomize();
 
     Real fL = ran1(), fR = ran1();
     ITensor Lf = L * fL;
@@ -740,12 +763,12 @@ TEST(NonContractingProduct)
 
     ITensor res1 = Lf / Rf;
 
-    CHECK(res1.hasindex(b2));
-    CHECK(res1.hasindex(a2));
-    CHECK(res1.hasindex(b5));
-    CHECK(res1.hasindex(a1));
-    CHECK(res1.hasindex(b3));
-    CHECK(res1.hasindex(b4));
+    CHECK(hasindex(res1,b2));
+    CHECK(hasindex(res1,a2));
+    CHECK(hasindex(res1,b5));
+    CHECK(hasindex(res1,a1));
+    CHECK(hasindex(res1,b3));
+    CHECK(hasindex(res1,b4));
 
     CHECK_EQUAL(res1.r(),6);
 
@@ -760,12 +783,12 @@ TEST(NonContractingProduct)
 
     ITensor res2 = R/L;
 
-    CHECK(res2.hasindex(b2));
-    CHECK(res2.hasindex(a2));
-    CHECK(res2.hasindex(b5));
-    CHECK(res2.hasindex(a1));
-    CHECK(res2.hasindex(b3));
-    CHECK(res2.hasindex(b4));
+    CHECK(hasindex(res2,b2));
+    CHECK(hasindex(res2,a2));
+    CHECK(hasindex(res2,b5));
+    CHECK(hasindex(res2,a1));
+    CHECK(hasindex(res2,b3));
+    CHECK(hasindex(res2,b4));
 
     CHECK_EQUAL(res2.r(),6);
 
@@ -780,7 +803,7 @@ TEST(NonContractingProduct)
 
     ITensor Q(a1,b4,a2,b2), P(a2,a3,a1);
 
-    Q.Randomize(); P.Randomize();
+    Q.randomize(); P.randomize();
 
     Real fQ = ran1(), fP = ran1();
     ITensor Qf = Q * fQ;
@@ -788,11 +811,11 @@ TEST(NonContractingProduct)
 
     ITensor res3 = Qf/Pf;
 
-    CHECK(res3.hasindex(b4));
-    CHECK(res3.hasindex(b2));
-    CHECK(res3.hasindex(a3));
-    CHECK(res3.hasindex(a1));
-    CHECK(res3.hasindex(a2));
+    CHECK(hasindex(res3,b4));
+    CHECK(hasindex(res3,b2));
+    CHECK(hasindex(res3,a3));
+    CHECK(hasindex(res3,a1));
+    CHECK(hasindex(res3,a2));
 
     CHECK_EQUAL(res3.r(),5);
 
@@ -805,11 +828,11 @@ TEST(NonContractingProduct)
 
     ITensor res4 = Pf/Qf;
 
-    CHECK(res4.hasindex(b4));
-    CHECK(res4.hasindex(b2));
-    CHECK(res4.hasindex(a3));
-    CHECK(res4.hasindex(a1));
-    CHECK(res4.hasindex(a2));
+    CHECK(hasindex(res4,b4));
+    CHECK(hasindex(res4,b2));
+    CHECK(hasindex(res4,a3));
+    CHECK(hasindex(res4,a1));
+    CHECK(hasindex(res4,a2));
 
     CHECK_EQUAL(res4.r(),5);
 
@@ -821,22 +844,56 @@ TEST(NonContractingProduct)
     }
 
 
-    ITensor psi(a1,a2,a3), mpoh(l2,a1,a1.primed(),a2,a2.primed());
-    psi.Randomize(); mpoh.Randomize();
+    ITensor psi(a1,a2,a3), mpoh(l2,a1,primed(a1),a2,primed(a2));
+    psi.randomize(); mpoh.randomize();
 
     ITensor Hpsi = mpoh / psi;
 
     CHECK_EQUAL(Hpsi.r(),6);
-    CHECK(Hpsi.hasindex(l2));
-    CHECK(Hpsi.hasindex(a1));
-    CHECK(Hpsi.hasindex(a2));
-    CHECK(Hpsi.hasindex(a1.primed()));
-    CHECK(Hpsi.hasindex(a2.primed()));
-    CHECK(Hpsi.hasindex(a3));
+    CHECK(hasindex(Hpsi,l2));
+    CHECK(hasindex(Hpsi,a1));
+    CHECK(hasindex(Hpsi,a2));
+    CHECK(hasindex(Hpsi,primed(a1)));
+    CHECK(hasindex(Hpsi,primed(a2)));
+    CHECK(hasindex(Hpsi,a3));
 
     for(int j2 = 1; j2 <= 2; ++j2)
-    { CHECK_CLOSE(Hpsi(l2(j2)),psi()*mpoh(l2(j2)),1E-10); }
-}
+        { CHECK_CLOSE(Hpsi(l2(j2)),psi(a1(1),a2(1),a3(1))*mpoh(l2(j2)),1E-10); }
+    }
+
+TEST(ComplexNonContractingProduct)
+    {
+    ITensor Lr(b2,b3,b4), Li(b2,b3,b4),
+            Rr(b3,a2,b5,b4), Ri(b3,a2,b5,b4);
+
+    Lr.randomize(); 
+    Li.randomize(); 
+    Rr.randomize();
+    Ri.randomize();
+
+    ITensor L = Complex_1*Lr + Complex_i*Li;
+    ITensor R = Complex_1*Rr + Complex_i*Ri;
+
+    ITensor res1 = L / R;
+
+    CHECK(hasindex(res1,b2));
+    CHECK(hasindex(res1,a2));
+    CHECK(hasindex(res1,b5));
+    CHECK(hasindex(res1,b3));
+    CHECK(hasindex(res1,b4));
+
+    CHECK_EQUAL(res1.r(),5);
+
+    ITensor resR(realPart(res1)),
+            resI(imagPart(res1));
+
+    ITensor rdiff = resR-(Lr/Rr-Li/Ri);
+    ITensor idiff = resI-(Lr/Ri+Li/Rr);
+
+    CHECK(rdiff.norm() < 1E-12);
+    CHECK(idiff.norm() < 1E-12);
+
+    }
 
 TEST(TieIndices)
     {
@@ -848,7 +905,7 @@ TEST(TieIndices)
 
     CHECK_CLOSE(dX.norm(),0,1E-5);
     CHECK_EQUAL(dX.r(),1);
-    CHECK(dX.hasindex(t));
+    CHECK(hasindex(dX,t));
 
     ITensor dZ(Z);
     dZ.tieIndices(s1,s2,t);
@@ -857,7 +914,7 @@ TEST(TieIndices)
 
     {
     ITensor T(l1,l2,a1,s2,s1);
-    T.Randomize();
+    T.randomize();
 
     ITensor TT(T);
     TT.tieIndices(l2,l1,s1,l2);
@@ -874,7 +931,7 @@ TEST(TieIndices)
     //Try tying m==1 inds
     {
     ITensor T(l1,a2,a1,s2,a3);
-    T.Randomize();
+    T.randomize();
 
     ITensor TT(T);
     TT.tieIndices(a1,a3,a2,a1);
@@ -896,11 +953,11 @@ TEST(Trace)
     {
 
     ITensor A(b2,a1,b3,b5,primed(b3));
-    A.Randomize();
+    A.randomize();
     Real f = -ran1();
     A *= f;
 
-    ITensor At = trace(b3,primed(b3),A);
+    ITensor At = trace(A,b3,primed(b3));
 
     for(int j2 = 1; j2 <= b2.m(); ++j2)
     for(int j5 = 1; j5 <= b5.m(); ++j5)
@@ -914,7 +971,7 @@ TEST(Trace)
         }
 
     ITensor MM(b5,primed(b5));
-    MM.Randomize();
+    MM.randomize();
     MM *= -2.34;
 
     Real tr = trace(MM);
@@ -1028,7 +1085,10 @@ TEST(ToFromMatrix11)
     Index link("link",4);
 
     ITensor T(link,a1);
-    T.assignFromVec(V);
+    T(link(1),a1(1)) = V(1);
+    T(link(2),a1(1)) = V(2);
+    T(link(3),a1(1)) = V(3);
+    T(link(4),a1(1)) = V(4);
 
     Matrix M41(4,1), M14(1,4);
     
@@ -1048,18 +1108,38 @@ TEST(ToFromMatrix11)
 
     }
 
+TEST(ToFromMatrix22)
+    {
+    Index i1("i1",3),
+          i2("i2",4),
+          i3("i3",2),
+          i4("i4",4);
+
+    ITensor T(i1,i2,i3,i4);
+    T.randomize();
+    T *= -1.23235;
+
+    Matrix M;
+    T.toMatrix22(i2,i1,i4,i3,M);
+    ITensor V;
+    V.fromMatrix22(i2,i1,i4,i3,M);
+
+    CHECK((T-V).norm() < 1E-12);
+    }
+
+/*
 TEST(SymmetricDiag11)
     {
-    ITensor T(s1,s1.primed());
-    commaInit(T) << 1, 2,
-                    2, 1;
+    ITensor T(s1,primed(s1));
+    commaInit(T,s1,primed(s1)) << 1, 2,
+                                  2, 1;
 
     T *= -2;
     Index mid;
     ITensor D,U;
     T.symmetricDiag11(s1,D,U,mid);
     ITensor UD(U);
-    UD.primeind(s1);
+    UD.prime(s1);
     UD /= D;
     ITensor rT = UD*U;
     ITensor diff(UD*U - T);
@@ -1077,17 +1157,25 @@ TEST(SymmetricDiag11)
     //Diagonalize and check the factorization
     Q.symmetricDiag11(q,D,U,mid);
     UD =U;
-    UD.primeind(q);
+    UD.prime(q);
     UD /= D;
     diff = UD*U - Q;
     CHECK(diff.norm() < 1E-10);
     }
+    */
 
 TEST(CommaAssignment)
     {
+    ITensor VV(s1);
+    VV.randomize();
+    VV *= -1;
+    commaInit(VV,s1) << 1, 2;
+    CHECK_EQUAL(VV(s1(1)),1);
+    CHECK_EQUAL(VV(s1(2)),2);
+
     ITensor ZZ(s1,s2);
-    commaInit(ZZ) << 1, 0, 
-                     0, -1;
+    commaInit(ZZ,s1,s2) << 1, 0, 
+                           0, -1;
     CHECK_EQUAL(ZZ(s1(1),s2(1)),1);
     CHECK_EQUAL(ZZ(s1(2),s2(1)),0);
     CHECK_EQUAL(ZZ(s1(1),s2(2)),0);
@@ -1096,22 +1184,164 @@ TEST(CommaAssignment)
     ITensor XX(s1,s2);
     XX(s1(2),s2(1)) = 5;
     XX *= 3;
-    commaInit(XX) << 0, 1, 
-                     1, 0;
+    commaInit(XX,s1,s2) << 0, 1, 
+                           1, 0;
     CHECK_EQUAL(XX(s1(1),s2(1)),0);
     CHECK_EQUAL(XX(s1(2),s2(1)),1);
     CHECK_EQUAL(XX(s1(1),s2(2)),1);
     CHECK_EQUAL(XX(s1(2),s2(2)),0);
 
     ITensor AA(s1,s2);
-    AA.Randomize();
+    AA.randomize();
     AA *= -ran1();
-    commaInit(AA) << 11, 21, 
-                     12, 22;
+    commaInit(AA,s1,s2) << 11, 12, 
+                           21, 22;
     CHECK_EQUAL(AA(s1(1),s2(1)),11);
-    CHECK_EQUAL(AA(s1(2),s2(1)),21);
     CHECK_EQUAL(AA(s1(1),s2(2)),12);
+    CHECK_EQUAL(AA(s1(2),s2(1)),21);
     CHECK_EQUAL(AA(s1(2),s2(2)),22);
+
+    ITensor T(s1,s2,s3);
+    T.randomize();
+    T *= -ran1();
+    commaInit(T,s1,s2,s3) << 111, 112, 
+                             121, 122,
+                             211, 212,
+                             221, 222;
+    CHECK_EQUAL(T(s1(1),s2(1),s3(1)),111);
+    CHECK_EQUAL(T(s1(1),s2(1),s3(2)),112);
+    CHECK_EQUAL(T(s1(1),s2(2),s3(1)),121);
+    CHECK_EQUAL(T(s1(1),s2(2),s3(2)),122);
+    CHECK_EQUAL(T(s1(2),s2(1),s3(1)),211);
+    CHECK_EQUAL(T(s1(2),s2(1),s3(2)),212);
+    CHECK_EQUAL(T(s1(2),s2(2),s3(1)),221);
+    CHECK_EQUAL(T(s1(2),s2(2),s3(2)),222);
+    }
+
+TEST(RealImagPart)
+    {
+    const Real f1 = 2.124,
+               f2 = 1.113;
+    ITensor ZiX = f1*Complex_1*Z + f2*Complex_i*X;
+    ITensor R(realPart(ZiX)),
+            I(imagPart(ZiX));
+    R -= f1*Z;
+    I -= f2*X;
+    CHECK_CLOSE(R.norm(),0,1E-5);
+    CHECK_CLOSE(I.norm(),0,1E-5);
+
+    //Test conj:
+    
+    ZiX.conj();
+    R = realPart(ZiX);
+    I = imagPart(ZiX);
+    R -= f1*Z;
+    I += f2*X;
+    CHECK_CLOSE(R.norm(),0,1E-5);
+    CHECK_CLOSE(I.norm(),0,1E-5);
+    }
+
+TEST(SwapPrimeTest)
+    {
+    ITensor T(s1,primed(s1));
+    commaInit(T,s1,primed(s1)) << 11, 12,
+                                  21, 22;
+
+    CHECK_EQUAL(T(s1(1),primed(s1)(1)),11);
+    CHECK_EQUAL(T(s1(2),primed(s1)(1)),21);
+    CHECK_EQUAL(T(s1(1),primed(s1)(2)),12);
+    CHECK_EQUAL(T(s1(2),primed(s1)(2)),22);
+
+    T = swapPrime(T,0,1);
+
+    CHECK_EQUAL(T(primed(s1)(1),s1(1)),11);
+    CHECK_EQUAL(T(primed(s1)(2),s1(1)),21);
+    CHECK_EQUAL(T(primed(s1)(1),s1(2)),12);
+    CHECK_EQUAL(T(primed(s1)(2),s1(2)),22);
+    }
+
+TEST(NoprimeTest)
+    {
+    ITensor T(s1,primed(s1));
+
+    //Check that T.noprime()
+    //throws an exception since it would
+    //lead to duplicate indices
+    CHECK_THROW(T.noprime(),ITError);
+    }
+
+TEST(NormTest)
+    {
+    A.randomize();
+    CHECK_CLOSE(A.norm(),sqrt((A*A).toReal()),1E-5);
+
+    ITensor C = Complex_1*A+Complex_i*B;
+
+    CHECK_CLOSE(C.norm(),sqrt(realPart(conj(C)*C).toReal()),1E-5);
+    }
+
+TEST(CR_ComplexAddition)
+    {
+    const Real f1 = 1.234,
+               f2 = 2.456;
+    ITensor iZX = f1*Complex_i*Z + f2*Complex_1*X;
+    ITensor R(realPart(iZX)),
+            I(imagPart(iZX));
+    R -= f2*X;
+    I -= f1*Z;
+    CHECK_CLOSE(R.norm(),0,1E-5);
+    CHECK_CLOSE(I.norm(),0,1E-5);
+    }
+
+TEST(CC_ComplexAddition)
+    {
+    const Real f1 = 1.234,
+               f2 = 2.456;
+    ITensor iZiX = f1*Complex_i*Z + f2*Complex_i*X;
+    ITensor R(realPart(iZiX)),
+            I(imagPart(iZiX));
+    I -= f1*Z+f2*X;
+    CHECK_CLOSE(R.norm(),0,1E-5);
+    CHECK_CLOSE(I.norm(),0,1E-5);
+    }
+
+TEST(ComplexScalar)
+    {
+    ITensor A(b4,s1),
+            B(b4,s1);
+    A.randomize();
+    B.randomize();
+    
+    const Real f1 = 2.1324,
+               f2 = -5.2235;
+
+    ITensor T1 = Complex(f1,0)*A;
+
+    CHECK((realPart(T1)-(f1*A)).norm() < 1E-12);
+    CHECK(imagPart(T1).norm() < 1E-12);
+
+    ITensor T2 = Complex(0,f2)*A;
+
+    CHECK(realPart(T2).norm() < 1E-12);
+    CHECK((imagPart(T2)-f2*A).norm() < 1E-12);
+
+    ITensor T3 = Complex(f1,f2)*A;
+    CHECK((realPart(T3)-f1*A).norm() < 1E-12);
+    CHECK((imagPart(T3)-f2*A).norm() < 1E-12);
+
+    ITensor T4 = Complex(f2,f1)*A;
+    CHECK((realPart(T4)-f2*A).norm() < 1E-12);
+    CHECK((imagPart(T4)-f1*A).norm() < 1E-12);
+
+    ITensor T5 = A+Complex_i*B;
+    T5 *= Complex(f1,f2);
+    CHECK((realPart(T5)-(f1*A-f2*B)).norm() < 1E-12);
+    CHECK((imagPart(T5)-(f2*A+f1*B)).norm() < 1E-12);
+
+    ITensor T6 = A+Complex_i*B;
+    T6 *= Complex(f2,f1);
+    CHECK((realPart(T6)-(f2*A-f1*B)).norm() < 1E-12);
+    CHECK((imagPart(T6)-(f1*A+f2*B)).norm() < 1E-12);
     }
 
 BOOST_AUTO_TEST_SUITE_END()

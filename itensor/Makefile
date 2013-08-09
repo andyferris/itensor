@@ -8,45 +8,44 @@ include ../options.mk
 
 ####################################
 
-SOURCES=index.cc indexset.cc itensor.cc itsparse.cc \
-        iqindex.cc iqindexset.cc iqtensor.cc iqtsparse.cc\
-        svdworker.cc mps.cc mpo.cc dmrg.cc
+SOURCES=index.cc itensor.cc itsparse.cc \
+        iqindex.cc iqtensor.cc iqcombiner.cc iqtsparse.cc\
+        svdalgs.cc mps.cc mpo.cc tevol.cc
 
 HEADERS=global.h allocator.h real.h permutation.h index.h prodstats.h \
-        indexset.h itensor.h qn.h iqindex.h iqindexset.h iqtensor.h \
-        condenser.h combiner.h iqcombiner.h \
-        svdworker.h mps.h mpo.h dmrg.h core.h observer.h DMRGObserver.h \
-        BaseDMRGWorker.h DMRGWorker.h Sweeps.h hams.h measure.h model.h\
-        hams/hubbardchain.h hams/heisenberg.h hams/ExtendedHubbard.h \
-        hams/triheisenberg.h hams/ising.h hams/J1J2Chain.h \
+        indexset.h counter.h itensor.h qn.h iqindex.h iqtensor.h \
+        condenser.h combiner.h qcounter.h iqcombiner.h \
+        spectrum.h svdalgs.h mps.h mpo.h core.h observer.h DMRGObserver.h \
+        sweeps.h stats.h model.h\
+        hams/HubbardChain.h hams/Heisenberg.h hams/ExtendedHubbard.h \
+        hams/TriHeisenberg.h hams/Ising.h hams/J1J2Chain.h \
+        hams/tJChain.h \
         model/spinhalf.h model/spinone.h model/hubbard.h model/spinless.h\
+        model/tj.h \
         eigensolver.h localop.h localmpo.h localmposet.h itsparse.h iqtsparse.h\
-        partition.h option.h hambuilder.h localmpo_mps.h tevol.h
+        partition.h option.h hambuilder.h localmpo_mps.h tevol.h dmrg.h bondgate.h
 
 ####################################
 
-INCLUDEFLAGS=-I$(INCLUDEDIR) -I$(BOOST_DIR) 
-
-CCFLAGS= $(INCLUDEFLAGS) $(OPTIMIZATIONS)
-CCGFLAGS= $(INCLUDEFLAGS) -ansi -Wall -pedantic -Wno-long-long -g -O0\
- -DDEBUG -DBOUNDS -DMATRIXBOUNDS -DSTRONG_DEBUG
+CCFLAGS= $(ITENSOR_INCLUDEFLAGS) $(OPTIMIZATIONS)
+CCGFLAGS= $(ITENSOR_INCLUDEFLAGS) $(DEBUGFLAGS)
 
 OBJECTS= $(patsubst %.cc,%.o, $(SOURCES))
 GOBJECTS= $(patsubst %.cc,.debug_objs/%.o, $(SOURCES))
-INCLUDE_HEADERS= $(patsubst %,$(INCLUDEDIR)/%, $(HEADERS))
+INCLUDE_HEADERS= $(patsubst %,$(ITENSOR_INCLUDEDIR)/%, $(HEADERS))
 
 .SUFFIXES: .cc $(SUFFIXES)
 
-$(INCLUDEDIR)/hams/%.h: hams/%.h
-	mkdir -p $(INCLUDEDIR)/hams
-	cp $^ $(INCLUDEDIR)/hams
+$(ITENSOR_INCLUDEDIR)/hams/%.h: hams/%.h
+	mkdir -p $(ITENSOR_INCLUDEDIR)/hams
+	cp $^ $(ITENSOR_INCLUDEDIR)/hams
 
-$(INCLUDEDIR)/model/%.h: model/%.h
-	mkdir -p $(INCLUDEDIR)/model
-	cp $^ $(INCLUDEDIR)/model
+$(ITENSOR_INCLUDEDIR)/model/%.h: model/%.h
+	mkdir -p $(ITENSOR_INCLUDEDIR)/model
+	cp $^ $(ITENSOR_INCLUDEDIR)/model
 
-$(INCLUDEDIR)/%.h: %.h
-	cp $^ $(INCLUDEDIR)
+$(ITENSOR_INCLUDEDIR)/%.h: %.h
+	cp $^ $(ITENSOR_INCLUDEDIR)
 
 %.o: %.cc
 	$(CCCOM) -c $(CCFLAGS) -o $@ $<
@@ -65,18 +64,18 @@ libitensor-g.a: mkdebugdir $(GOBJECTS)
 	ranlib libitensor-g.a
 
 headerscopy: $(INCLUDE_HEADERS)
-	cp core.h $(INCLUDEDIR)
+	cp core.h $(ITENSOR_INCLUDEDIR)
 
 libs: libitensor.a 
-	cp libitensor.a $(LIBDIR)
+	cp libitensor.a $(ITENSOR_LIBDIR)
 
 installo: headerscopy libitensor.a
-	cp libitensor.a $(LIBDIR)
-	ranlib $(LIBDIR)/libitensor.a
+	cp libitensor.a $(ITENSOR_LIBDIR)
+	ranlib $(ITENSOR_LIBDIR)/libitensor.a
 
 installg: headerscopy libitensor-g.a
-	cp libitensor-g.a $(LIBDIR)
-	ranlib $(LIBDIR)/libitensor-g.a
+	cp libitensor-g.a $(ITENSOR_LIBDIR)
+	ranlib $(ITENSOR_LIBDIR)/libitensor-g.a
 
 mkdebugdir:
 	mkdir -p .debug_objs
@@ -84,13 +83,13 @@ mkdebugdir:
 clean:	
 	rm -fr *.o .debug_objs libitensor.a libitensor-g.a
 
-DEPHEADERS=global.h real.h permutation.h index.h 
+DEPHEADERS=global.h real.h permutation.h index.h option.h
 index.o: $(DEPHEADERS)
 .debug_objs/index.o: $(DEPHEADERS)
 DEPHEADERS+= indexset.h
 indexset.o: $(DEPHEADERS)
 .debug_objs/indexset.o: $(DEPHEADERS)
-DEPHEADERS+= allocator.h itensor.h
+DEPHEADERS+= allocator.h itensor.h counter.h
 itensor.o: $(DEPHEADERS)
 .debug_objs/itensor.o: $(DEPHEADERS)
 DEPHEADERS+= itsparse.h
@@ -99,24 +98,24 @@ itsparse.o: $(DEPHEADERS)
 DEPHEADERS+= qn.h iqindex.h
 iqindex.o: $(DEPHEADERS)
 .debug_objs/iqindex.o: $(DEPHEADERS)
-DEPHEADERS+= iqindexset.h
-iqindexset.o: $(DEPHEADERS)
-.debug_objs/iqindexset.o: $(DEPHEADERS)
-DEPHEADERS+= iqtensor.h
+DEPHEADERS+= iqtensor.h qcounter.h
 iqtensor.o: $(DEPHEADERS)
 .debug_objs/iqtensor.o: $(DEPHEADERS)
 DEPHEADERS+= iqtsparse.h
 iqtsparse.o: $(DEPHEADERS)
 .debug_objs/iqtsparse.o: $(DEPHEADERS)
-DEPHEADERS+= combiner.h condenser.h iqcombiner.h localmpo.h svdworker.h
-svdworker.o: $(DEPHEADERS)
-.debug_objs/svdworker.o: $(DEPHEADERS)
+DEPHEADERS+= combiner.h condenser.h iqcombiner.h localmpo.h
+iqcombiner.o: $(DEPHEADERS)
+.debug_objs/iqcombiner.o: $(DEPHEADERS)
+DEPHEADERS+= spectrum.h svdalgs.h
+svdalgs.o: $(DEPHEADERS)
+.debug_objs/svdalgs.o: $(DEPHEADERS)
 DEPHEADERS+= mps.h
 mps.o: $(DEPHEADERS)
 .debug_objs/mps.o: $(DEPHEADERS)
 DEPHEADERS+= mpo.h
 mpo.o: $(DEPHEADERS)
 .debug_objs/mpo.o: $(DEPHEADERS)
-DEPHEADERS+= DMRGObserver.h dmrg.h
-dmrg.o: $(DEPHEADERS)
-.debug_objs/dmrg.o: $(DEPHEADERS)
+DEPHEADERS+= bondgate.h tevol.h
+tevol.o: $(DEPHEADERS)
+.debug_objs/tevol.o: $(DEPHEADERS)

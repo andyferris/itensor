@@ -6,8 +6,10 @@
 #include <math.h>
 #define CHANGE      0
 #include <fstream>
+#include "error.h"
+#include <cstdlib>
 
-#include <Accelerate/Accelerate.h>
+#include "lapack_wrap.h"
 
 using namespace std;
 
@@ -44,7 +46,7 @@ void Orthog(const MatrixRef& M,int num,int numpass)	// Orthonormalize a Matrix M
         Mcols << M.Columns(1,i-1);
         dotsref << dots.SubVector(1,i-1);
         int pass;
-	for(pass = 1; pass <= numpass; pass++)
+        for(pass = 1; pass <= numpass; pass++)
 	    {
 	    dotsref = Mcols.t() * coli;
 	    coli -= Mcols * dotsref;
@@ -60,6 +62,14 @@ void Orthog(const MatrixRef& M,int num,int numpass)	// Orthonormalize a Matrix M
 	    }
         }
     }
+
+//extern "C" void dgeqrf_(MKL_INT *m, MKL_INT *n, double *a, MKL_INT *lda, 
+//                        double *tau, double *work, MKL_INT *lwork, 
+//                        MKL_INT *info );
+
+//extern "C" void dorgqr_(MKL_INT *m, MKL_INT *n, MKL_INT *k, double *a, 
+//                       MKL_INT *lda, double *tau, double *work, 
+//                       MKL_INT *lwork, MKL_INT *info );
 
 void 
 QRDecomp(const MatrixRef& M, Matrix& Q, Matrix& R)
@@ -436,8 +446,7 @@ static void tql2(Vector& D, Vector& E, Matrix& Z)
     dotranspose(z,n);
     }
 
-/*
-static void tred3(const Matrix& X, Vector& D, Vector& E, Matrix& A)
+/* static void tred3(const Matrix& X, Vector& D, Vector& E, Matrix& A)
 {
    Real tol =
       FloatingPointPrecision::Minimum()/FloatingPointPrecision::Epsilon();
@@ -476,11 +485,9 @@ static void tred3(const Matrix& X, Vector& D, Vector& E, Matrix& A)
       }
       *d = *a; *a = h;
    }
-}
-*/
+}*/
 
-/*
-static void tql1(Vector& D, Vector& E)
+/*static void tql1(Vector& D, Vector& E)
 {
 //   Tracer et("Evalue(tql1)");
    Real eps = FloatingPointPrecision::Epsilon();
@@ -537,8 +544,8 @@ static void tql1(Vector& D, Vector& E)
       if (!test) i=0;
       D.el(i) = p;
    }
-}
-*/
+}*/
+
 
 void BackupEigenValues(const MatrixRef& A, Vector& D, Matrix& Z)
 {
@@ -629,6 +636,7 @@ void EigenValues(const MatrixRef& A, Vector& D, Matrix& Z)
 }
 */
 
+
 #else      // }}---{{
            // copy from next "#else" till "endif", part of the origional code
  // C++ interfaces to Numerical Recipes routines, other machine
@@ -638,7 +646,7 @@ void EigenValues(const MatrixRef& A, Vector& D, Matrix& Z)
 void ludcmp(Matrix& a,int* indx,Real* d)
     {
     const Real TINY = 1e-20;
-    int i, imax, j, k;
+    int i, imax=0, j, k;
     Real big, dum, sum, temp;
     Real *vv;
     int n = a.Nrows();
@@ -1308,6 +1316,9 @@ void Sort(Vector& V, IntArray1& ind)
     }
 
 /*
+#ifdef __alpha
+// extern "C" int dfft_(char*,char*,char*,Real*,Real*,int*,int*);
+// extern "C" int dfft_(char*,char*,char*,Real*,Real*,Real*,Real*,int*,int*);
 
 int FFT(const VectorRef& in, Vector& outre, Vector& outim)
     {
@@ -1344,58 +1355,159 @@ Matrix Exp(const MatrixRef& M)
     return y * Transpose(evec);
     }
 
+#ifdef CHANGE
+#ifdef __alpha
+   //Use DEC's LAPACK
+
+/*
+void EigenValues(const MatrixRef& A, Vector& D, Matrix& Z)
+{
+    if (A.Ncols() != A.Nrows() || A.Nrows() < 1)
+      _merror("EigenValues: Input Matrix must be square");
+
+    char jobz[] = "V";
+    char uplo[] = "U";
+    int lda = A.Ncols();
+    int n = A.Ncols();
+    int info;
+    D = A.Column(1);
+    int lwork = max(1, 3*n-1);
+    Vector Work(lwork);
+    Z = A;
+    dsyev(&jobz, &uplo, &n, Z.Store(), &lda, D.Store(), Work.Store(),
+          &lwork, &info);
+    Z = Z.t();
+}
+*/
+
+#else      // __alpha
+#define NEWEIGS 1
+#ifdef NEWEIGS
+//extern "C" void dsyevd_(char* jobz, char* uplo, long int* n, Real* a, long int* lda,
+	  //Real* w, Real* work, long int* lwork, long int *iwork, long int* liwork,long int* info);
+
+/*
+void EigenValues(const MatrixRef& A, Vector& D, Matrix& Z)
+{
+    cerr << "In EigenValues lint." << endl;
+    if (A.Ncols() != A.Nrows() || A.Nrows() < 1)
+      _merror("EigenValues: Input Matrix must be square");
+
+    static int iwork[100000];
+    const char *jobz = "V";
+    const char *uplo = "U";
+    int lda = A.Ncols();
+    int n = A.Ncols();
+    int info;
+    D = A.Column(1);
+    int lwork = max(1, 1+6*n+2*n*n);
+    int liwork = 3 + 5*n;
+    Vector Work(lwork);
+    
+    Z = A;
+    Z += A.t();
+    Z *= 0.5;
+
+    long int ln = (long int) n;
+    long int llda = (long int) lda;
+    long int llwork = (long int) lwork;
+    long int Liwork = (long int) iwork;
+    long int linfo = (long int) info;
+    dsyevd_((char *)jobz, (char *)uplo, &ln, Z.Store(), &llda, D.Store(), Work.Store(),
+          &llwork, &Liwork, &Liwork, &linfo);
+    info = (int) linfo;
+    if(info != 0)
+	{
+	cerr << "info is " << info << endl;
+	cout << "info is " << info << endl;
+	cout << "redoing EigenValues " << endl;
+	cerr << "redoing EigenValues " << endl;
+	Matrix AA(A);
+	for(int i = 1; i <= n; i++)
+	    for(int j = i+1; j <= n; j++)
+		if(AA(i,j) != AA(j,i))
+		    cout << "Asym: " << i SP j SP AA(i,j) SP AA(j,i) << endl;
+	BackupEigenValues(A,D,Z);
+	return;
+	}
+    Z = Z.t();
+}
+*/
+
+//extern "C" void dsyevd_(char* jobz, char* uplo,  int* n, double* a,  int* lda, double* w, Real* work,  int* lwork, int* info);
+
+//Following code written for greenplanet cluster at UC Irvine by E.M. Stoudenmire
+
+//extern "C" void dsyevd_(char* jobz, char* uplo, MKL_INT* n, Real* a, MKL_INT* lda, Real* w, Real* work, MKL_INT* lwork, MKL_INT *iwork, MKL_INT* liwork, MKL_INT* info);
+//extern "C" void    dgeev_( char *jobvl, char *jobvr, MKL_INT *n, double *a, MKL_INT *lda, double *wr, double *wi, double *vl, MKL_INT *ldvl, double *vr, MKL_INT *ldvr, double *work, MKL_INT *lwork, MKL_INT *info );
 
 void EigenValues(const MatrixRef& A, Vector& D, Matrix& Z)
 {
-    __CLPK_integer N = A.Ncols();
-    if (N != A.Nrows() || A.Nrows() < 1)
-      _merror("EigenValues: Input Matrix must be square");
+    if (A.Ncols() != A.Nrows() || A.Nrows() < 1)
+        _merror("EigenValues: Input Matrix must be square");
 
-    char jobz = 'V';
-    char uplo = 'U';
-    __CLPK_integer lwork = max(1,3*N-1);//max(1, 1+6*N+2*N*N);
-    __CLPK_doublereal work[lwork];
-    __CLPK_integer info;
-    
-    D.ReDimension(N);
-    Z = A;
+    //If in debug mode, check that A is symmetric
+    assert(Norm(((Matrix)(A -A.t())).TreatAsVector()) < 1E-10);
 
-    dsyev_(&jobz,&uplo,&N,Z.Store(),&N,D.Store(),work,&lwork,&info);
-
-    if(info != 0)
+    if(A.Ncols() == 1)
 	{
-        cerr << "info is " << info << endl;
-        cout << "info is " << info << endl;
-        cout << "redoing EigenValues " << endl;
-        cerr << "redoing EigenValues " << endl;
-        Matrix AA(A);
-        for(int i = 1; i <= N; i++)
-        for(int j = i+1; j <= N; j++)
-        {
-            if(AA(i,j) != AA(j,i))
-                cout << "Asym: " << i SP j SP AA(i,j) SP AA(j,i) << endl;
-        }
-        BackupEigenValues(A,D,Z);
+        Z = A;
+        Z(1,1) = 1.0;
+        D = A.Column(1);
         return;
 	}
 
-    //Transpose Z before return
+    MKL_INT n = A.Ncols();
+
+    char jobz = 'V';
+    char uplo = 'U';
+
+    Z = A;
+    D = A.Column(1);
+
+    double QWORK[1];
+    MKL_INT qlwork = -1;
+
+    //Query work size
+    MKL_INT info = 0;
+    dsyev_wrapper(&jobz,&uplo,&n,Z.Store(),&n,D.Store(),QWORK,&qlwork,&info);
+	if(info != 0)
+        {
+        cerr << "info is " << info << endl;
+        _merror("Error condition in dsyev_ (query call).");
+        }
+
+    //Call routine
+    MKL_INT lwork = (MKL_INT) QWORK[0];
+    double WORK[lwork];
+    info = 0;
+    dsyev_wrapper(&jobz,&uplo,&n,Z.Store(),&n,D.Store(),WORK,&lwork,&info);
+	if(info != 0)
+        {
+        cerr << "info is " << info << endl;
+        _merror("Error condition in dsyev_.");
+        }
     Z = Z.t();
+
 }
+
+//extern "C" void dsygv_(char* jobz, char* uplo, MKL_INT* n, Real* a, MKL_INT* lda, Real* w, Real* work, MKL_INT* lwork, MKL_INT *iwork, MKL_INT* liwork, MKL_INT* info);
+//extern "C" void    dsygv( MKL_INT *itype, char *jobz, char *uplo, MKL_INT *n, double *a, MKL_INT *lda, double *b, MKL_INT *ldb, double *w, double *work, MKL_INT *lwork, MKL_INT *info );
+//extern "C" void    dsygv_( MKL_INT *itype, char *jobz, char *uplo, MKL_INT *n, double *a, MKL_INT *lda, double *b, MKL_INT *ldb, double *w, double *work, MKL_INT *lwork, MKL_INT *info );
 
 void 
 GeneralizedEV(const MatrixRef& A, const MatrixRef& B, Vector& D, Matrix& Z)
     {
-    __CLPK_integer N = A.Ncols();
+    MKL_INT N = A.Ncols();
     if (N != A.Nrows() || A.Nrows() < 1)
       _merror("EigenValues: Input Matrix must be square");
 
     int itype = 1; //A x = lambda B x type problem
     char jobz = 'V';
     char uplo = 'U';
-    __CLPK_integer lwork = max(1,3*N-1);//max(1, 1+6*N+2*N*N);
-    __CLPK_doublereal work[lwork];
-    __CLPK_integer info;
+    MKL_INT lwork = max(1,3*N-1);//max(1, 1+6*N+2*N*N);
+    double work[lwork];
+    MKL_INT info;
     
     D.ReDimension(N);
     Z = A;
@@ -1415,7 +1527,8 @@ GeneralizedEV(const MatrixRef& A, const MatrixRef& B, Vector& D, Matrix& Z)
     Z = Z.t();
     }
 
-void GenEigenValues(const MatrixRef& A, Vector& Re, Vector& Im)
+void 
+GenEigenValues(const MatrixRef& A, Vector& Re, Vector& Im)
     {
     if (A.Ncols() != A.Nrows() || A.Nrows() < 1)
         _merror("GenEigenValues: Input Matrix must be square");
@@ -1427,26 +1540,33 @@ void GenEigenValues(const MatrixRef& A, Vector& Re, Vector& Im)
         return;
         }
 
-    int n = A.Ncols();
+    MKL_INT n = A.Ncols();
 
     char jobvl = 'N'; //don't compute left evecs
     char jobvr = 'N'; //don't compute right evecs
-
-    int lwork = max(1,4*n);
-    Vector Work(lwork); Work = 0;
 
     Matrix Z = A;
     Re = A.Column(1);
     Im = Re;
 
-    Vector noevecs(2); noevecs = 0; //Shouldn't be referenced by dgeev
-    int num_evecs = 1;
+    double QWORK[1];
+    MKL_INT qlwork = -1;
+    double* noevecs = 0; MKL_INT num_evecs = 1;
 
-    int info = 0;
+    //Query work size
+    MKL_INT info = 0;
+    dgeev_(&jobvl,&jobvr,&n,Z.Store(),&n,Re.Store(),Im.Store(),noevecs,&num_evecs,noevecs,&num_evecs,QWORK,&qlwork,&info);
+	if(info != 0)
+        {
+        cerr << "info is " << info << endl;
+        _merror("Error condition in dsyev_ (query call).");
+        }
 
     //Call routine
-    //      JOBVL JOBVR  N   A       LDA   WR         WI         VL             LDVL       VR               LDVR      WORK        LWORK   INFO 
-    dgeev_(&jobvl,&jobvr,&n,Z.Store(),&n,Re.Store(),Im.Store(),noevecs.Store(),&num_evecs,noevecs.Store(),&num_evecs,Work.Store(),&lwork,&info);
+    MKL_INT lwork = (MKL_INT) QWORK[0];
+    double WORK[lwork];
+    info = 0;
+    dgeev_(&jobvl,&jobvr,&n,Z.Store(),&n,Re.Store(),Im.Store(),noevecs,&num_evecs,noevecs,&num_evecs,WORK,&lwork,&info);
 	if(info != 0)
         {
         cerr << "info is " << info << endl;
@@ -1454,6 +1574,26 @@ void GenEigenValues(const MatrixRef& A, Vector& Re, Vector& Im)
         }
     }
 
+//End greenplanet code
+
+#else
+#ifndef _CRAY
+
+
+/*
+void EigenValues(const MatrixRef& A, Vector& D, Matrix& Z)
+{
+    if (A.Ncols() != A.Nrows() || A.Nrows() < 1)
+      _merror("EigenValues: Input Matrix must be square");
+    Vector E; tred2(A, D, E, Z); tql2(D, E, Z);
+}
+*/
+
+#endif         // CRAY EigenValues() stuff
+#endif         // __alpha for EigenValues() stuff
+#endif		// new eigs stuff
+
+#endif
 
 void rotate22(double *zki,double *zki1,double c,double s,int n)
     {
@@ -1462,7 +1602,7 @@ void rotate22(double *zki,double *zki1,double c,double s,int n)
     double *pzki1 = zki1 - 1;
     double *pzki = zki - 1;
     static double junk[10];
-    int nr = n&3 + 4;	// Same as n%4 + 4
+    int nr = (n&3) + 4;	// Same as n%4 + 4
     int nmain = n-nr;
     if(nmain < 0) nmain = 0;
     int k;
@@ -1553,7 +1693,7 @@ double dotprod(double *a,double *b, int l)
     register double s0 = 0, s1 = 0, s2 = 0, s3 = 0;	// 4
     register double t0 = 0, t1 = 0, t2 = 0, t3 = 0;	// 4
     register double a0,b0,a1,b1,a2,b2,a3,b3;
-    register double prea,preb;
+    register double prea=0,preb=0;
     int i,ll = l&3;
     for(i = l-ll; i < l; i++)
 	s3 += a[i] * b[i];
@@ -1713,7 +1853,7 @@ void SVD(const MatrixRef& A, Matrix& U, Vector& d, Matrix& V)
     for(i = 1; i <= VV.Nrows(); i++)
 	V.Row(i) = VV.Row(ind(i));
     }
-*/
+    */
 
 int svd(double *a, int *m, int *n, int *mp, int *np, 
 	double *w, double *v);
@@ -2079,17 +2219,15 @@ double dpythag_(double *a, double *b)
     } 
 
 
-typedef long int lint;
+//typedef long int lint;
 
-/*
-extern "C" lint dgesdd_(char*,lint*,lint*,double*,lint*,double*,
-	    double*,lint*,double*,lint*,double*,lint*,lint*,lint*);
-*/
+//extern "C" lint dgesdd_(char*,lint*,lint*,double*,lint*,double*,
+	    //double*,lint*,double*,lint*,double*,lint*,lint*,lint*);
 
 /*
 void newSVD(const MatrixRef& A, Matrix& U, Vector& d, Matrix& V)
     {
-    __CLPK_integer m = A.Nrows(), n = A.Ncols(); 
+    int m = A.Nrows(), n = A.Ncols(); 
     if(m < n)
 	{
 	Matrix AA = A.t();
@@ -2103,21 +2241,30 @@ void newSVD(const MatrixRef& A, Matrix& U, Vector& d, Matrix& V)
     Matrix AA = A.t();
     Matrix UU(n,m), VV(n,n);
     d.ReDimension(n);
-    __CLPK_integer lda = m, ldu = m, ldv = n, info;
-    __CLPK_integer lwork = -1;
-    Vector work(10), iwork(8*n);
+    int lda = m, ldu = m, ldv = n;
+    lint info;
+    int lwork = -1;
+    double qwork[2];
+    long int liqwork[2];
 
-    dgesdd_(&jobz,&m,&n,AA.Store(), &lda,d.Store(), UU.Store(), &ldu,
-	    VV.Store(), &ldv, work.Store(), &lwork,
-	    (__CLPK_integer *)iwork.Store(), &info);
-    lwork = (int)work(1);
+    long int lm = (long int) m;
+    long int ln = (long int) n;
+    long int llda = (long int) lda;
+    long int lldu = (long int) ldu;
+    long int lldv = (long int) ldv;
+    long int llwork = (long int) lwork;
+    dgesdd_(&jobz,&lm,&ln,AA.Store(), &llda,d.Store(), UU.Store(), &lldu, VV.Store(), &lldv, qwork, &llwork, liqwork, &info);
+    //       1     2   3   4          5     6          7            8       9         10      11         12    13     14
+    lwork = (int)qwork[0];
     //cout << "optimal size is " << work(1) << endl;
     //cout << "m, n, lwork are " << m SP n SP lwork << endl;
-    work.ReDimension(lwork);
+    //work.ReDimension(lwork);
+    double work[lwork];
+    long int liwork[lwork];
 
-    dgesdd_(&jobz,&m,&n,AA.Store(), &lda,d.Store(), UU.Store(), &ldu,
-	    VV.Store(), &ldv, work.Store(), &lwork,
-	    (__CLPK_integer *)iwork.Store(), &info);
+    dgesdd_(&jobz,&lm,&ln,AA.Store(), &llda,d.Store(), UU.Store(), &lldu,
+	    VV.Store(), &lldv, work, &llwork,
+	    liwork, &info);
     U = UU.t();
     V = VV.t();
     if(1)
@@ -2154,7 +2301,7 @@ void newSVD(const MatrixRef& A, Matrix& U, Vector& d, Matrix& V)
 	    }
 	}
     }
-    */
+*/
 
 void getrowbasis(Matrix& B, Real cutoff,bool nopivot = false)	// cutoff is in norm^2 of a row, 10^-20 is OK
     {
@@ -2285,10 +2432,11 @@ Real check_complex_SVD(const Matrix& Mre, const Matrix& Mim, const Matrix& Ure,
     return Norm(Matrix(Mre-resre).TreatAsVector()) + Norm(Matrix(Mim-resim).TreatAsVector());
     }
 
+/*
 void newcomplexSVD(const Matrix& Are, const Matrix& Aim, Matrix& Ure, Matrix& Uim, 
 	Vector& d, Matrix& Vre, Matrix& Vim)
     {
-    __CLPK_integer m = Are.Nrows(), n = Are.Ncols(); 
+    int m = Are.Nrows(), n = Are.Ncols(); 
     if(m < n)
 	{
 	Matrix mret = Are.t(), mimt = -Aim.t(),UUre,UUim,VVre,VVim;
@@ -2311,37 +2459,35 @@ void newcomplexSVD(const Matrix& Are, const Matrix& Aim, Matrix& Ure, Matrix& Ui
     Vre.ReDimension(n,n);
     Vim.ReDimension(n,n);
     d.ReDimension(n);
-    __CLPK_integer lda = m, ldu = m, ldv = n, info;
-    __CLPK_integer lwork = -1;
+    int lda = m, ldu = m, ldv = n, info;
+    int lwork = -1;
     Vector work(2*n*n+2*n+m+100), iwork(8*n), rwork(10*n*n+10 *n+1000);
     lwork = n*n+n+m+50;
 
-    /*
-    zgesdd_(&jobz,&m,&n,(__CLPK_doublecomplex*)AA.Store(), 
-	    &lda,d.Store(), (__CLPK_doublecomplex*)UU.Store(), 
-	    &ldu, (__CLPK_doublecomplex*)VV.Store(), &ldv, 
-	    (__CLPK_doublecomplex*)work.Store(), &lwork, (__CLPK_integer *)iwork.Store(), &info);
-     JOBZ, [M], [N], A, [LDA], S, U, [LDU], VT, [LDVT], 
-		  *       [WORK], [LWORK], [RWORK], [IWORK], [INFO])
-    int zgesdd_(char*, __CLPK_integer*, __CLPK_integer*, __CLPK_doublecomplex*,
-	    __CLPK_integer*, __CLPK_doublereal*, __CLPK_doublecomplex*,
-	    __CLPK_integer*, __CLPK_doublecomplex*, __CLPK_integer*,
-	    __CLPK_doublecomplex*, __CLPK_integer*, __CLPK_doublereal*,
-	    __CLPK_integer*, __CLPK_integer*)' 
-    lwork = (int)work(1);
+    //zgesdd_(&jobz,&m,&n,(__CLPK_doublecomplex*)AA.Store(), 
+	//    &lda,d.Store(), (__CLPK_doublecomplex*)UU.Store(), 
+	//    &ldu, (__CLPK_doublecomplex*)VV.Store(), &ldv, 
+	//    (__CLPK_doublecomplex*)work.Store(), &lwork, (int *)iwork.Store(), &info);
+    // JOBZ, [M], [N], A, [LDA], S, U, [LDU], VT, [LDVT], 
+    //		  *       [WORK], [LWORK], [RWORK], [IWORK], [INFO])
+    //int zgesdd_(char*, int*, int*, __CLPK_doublecomplex*,
+	//    int*, __CLPK_doublereal*, __CLPK_doublecomplex*,
+	//    int*, __CLPK_doublecomplex*, int*,
+	//    __CLPK_doublecomplex*, int*, __CLPK_doublereal*,
+	//    int*, int*)' 
+    //lwork = (int)work(1);
     //cout << "optimal size is " << work(1) << endl;
     //cout << "m, n, lwork are " << m SP n SP lwork << endl;
-    work.ReDimension(lwork*2);
-    */
+    //work.ReDimension(lwork*2);
 
     zgesdd_(&jobz,&m,&n,(__CLPK_doublecomplex*)AA.Store(), &lda,d.Store(), (__CLPK_doublecomplex*)UU.Store(), &ldu,
 	    (__CLPK_doublecomplex*)VV.Store(), &ldv, (__CLPK_doublecomplex*)work.Store(), &lwork,
-	    rwork.Store(), (__CLPK_integer *)iwork.Store(), &info);
+	    rwork.Store(), (int *)iwork.Store(), &info);
     bool do_over = false;
     if(info != 0) do_over = true;
     //dgesdd_(&jobz,&m,&n,AA.Store(), &lda,d.Store(), UU.Store(), &ldu,
 //	    VV.Store(), &ldv, work.Store(), &lwork,
-//	    (__CLPK_integer *)iwork.Store(), &info);
+//	    (int *)iwork.Store(), &info);
     for(int i = 1; i <= n; i++)
 	for(int j = 1; j <= m; j++)
 	    Ure(j,i) = UU(i,2*j-1), Uim(j,i) = UU(i,2*j);
@@ -2412,7 +2558,7 @@ void newcomplexSVD(const Matrix& Are, const Matrix& Aim, Matrix& Ure, Matrix& Ui
 	    cout << "Norm of Uim is " << Norm(Uim.TreatAsVector()) << endl;
 	    cout << "Norm of Vre is " << Norm(Vre.TreatAsVector()) << endl;
 	    cout << "Norm of Vim is " << Norm(Vim.TreatAsVector()) << endl;
-	    std::ofstream outfile;
+	    ofstream outfile;
 	    outfile.open("bad_matrix");
 	    int nrows = Are.Nrows(), ncols = Are.Ncols();
 	    outfile.write((char*)&nrows,sizeof(nrows)); 
@@ -2437,18 +2583,19 @@ void newcomplexSVD(const Matrix& Are, const Matrix& Aim, Matrix& Ure, Matrix& Ui
 	    }
 	}
     }
+*/
 
 
 #include <complex>
 #include <vector>
-typedef std::complex<double> Complex;
+typedef complex<double> Complex;
 static Complex I(0.0,1.0), C1(1.0,0.0),C0(0.0,0.0);
 inline Real sqr(Real a) { return a*a; }
 
 class ComplexVector
     {
 public:
-    std::vector<Complex> dat;
+    vector<Complex> dat;
     ComplexVector(int n=1) : dat(n,C0) { }
     Complex& operator()(int i) { return dat[i-1]; }			// access 1 ... n
     Complex operator()(int i) const { return dat[i-1]; }
@@ -2490,7 +2637,7 @@ public:
 class ComplexMatrix
     {
 public:
-    std::vector<Complex> dat;
+    vector<Complex> dat;
     int nrow, ncol;
     int index(int r, int c) const { 
 	if(r > nrow || c > ncol) error("bac index");
@@ -2590,8 +2737,8 @@ void CSVD(ComplexMatrix a,   ComplexMatrix& u, Vector& s, ComplexMatrix& v)
     double tol, w, x, y, z;
     eta = 2.8E-16;			/* eta = the relative machine precision */
     tol = 4.0E-293; 		/* tol = the smallest normalized positive number, divided by eta */
-    /* eta = 2^-52 * 1.26 fudge*/
-    /* tol = 2^-1023 / eta */
+    /* eta = 2^-52 * 1.26 fudge
+     * tol = 2^-1023 / eta */
     np = n + p;
     nM1 = n - 1;
     L = 0;
@@ -2909,10 +3056,15 @@ void SVDcomplex(const Matrix& Mre, const Matrix& Mim, Matrix& Ure,
     Vim = -V.ImMat().t();
     }
 
+//extern "C"
+//void zheev_(char *jobz, char *uplo, MKL_INT *n, MKL_Complex16 *a, 
+//            MKL_INT *lda, double *w, MKL_Complex16 *work, MKL_INT *lwork, 
+//            double *rwork, MKL_INT *info );
+
 void HermitianEigenvalues(const Matrix& re, const Matrix& im, Vector& evals,
 	                                Matrix& revecs, Matrix& ievecs)
     {
-    __CLPK_integer N = re.Ncols();
+    MKL_INT N = re.Ncols();
     if (N != re.Nrows() || re.Nrows() < 1)
       _merror("HermitianEigenValues: Input Matrix must be square");
     if(im.Ncols() != N || im.Nrows() != N)
@@ -2923,14 +3075,15 @@ void HermitianEigenvalues(const Matrix& re, const Matrix& im, Vector& evals,
 
     char jobz = 'V';
     char uplo = 'U';
-    __CLPK_integer lwork = max(1,3*N-1);//max(1, 1+6*N+2*N*N);
-    __CLPK_doublecomplex work[lwork];
-    __CLPK_doublereal rwork[lwork];
-    __CLPK_integer info;
+    MKL_INT lwork = max(1,3*N-1);//max(1, 1+6*N+2*N*N);
+    MKL_Complex16 work[lwork];
+    double rwork[lwork];
+    MKL_INT info;
     
     evals.ReDimension(N);
 
-    zheev_(&jobz,&uplo,&N,(__CLPK_doublecomplex*)&(H.dat[0]),&N,evals.Store(),work,&lwork,rwork,&info);
+    zheev_(&jobz,&uplo,&N,(MKL_Complex16*)&(H.dat[0]),&N,evals.Store(),
+           work,&lwork,rwork,&info);
     revecs = H.RealMat().t();
     ievecs = H.ImMat().t();
 

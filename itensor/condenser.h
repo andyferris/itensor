@@ -43,7 +43,10 @@ class Condenser
         }
 
     void 
-    doprime(PrimeType pt = primeBoth, int inc = 1);
+    prime(int inc = 1) { prime(All,inc); }
+
+    void 
+    prime(IndexType type = All, int inc = 1);
 
     void product(const IQTensor& t, IQTensor& res) const;
 
@@ -81,10 +84,10 @@ private:
     }; //class Condenser
 
 void inline Condenser::
-doprime(PrimeType pt, int inc)
+prime(IndexType type, int inc)
     {
-    bigind_.doprime(pt,inc);
-    smallind_.doprime(pt,inc);
+    bigind_.prime(type,inc);
+    smallind_.prime(type,inc);
 
     small_to_big.clear();
 
@@ -94,10 +97,10 @@ doprime(PrimeType pt, int inc)
         it != big_to_small.end(); ++it)
         {
         Index pindex = it->first;
-        pindex.doprime(pt,inc);
+        pindex.prime(type,inc);
 
         std::pair<Index,int> newpair = it->second;
-        newpair.first.doprime(pt,inc);
+        newpair.first.prime(type,inc);
 
         new_bts[pindex] = newpair;
         small_to_big[newpair] = pindex;
@@ -138,33 +141,33 @@ init(const std::string& smallind_name)
     */
     static std::vector<QN> qns(1000);
     qns.resize(0);
-    Foreach(const inqn& x, bigind_.iq()) 
+    Foreach(const IndexQN& x, bigind_.indices()) 
         qns.push_back(x.qn);
 
     sort(qns.begin(),qns.end());
 
     std::vector<QN>::iterator ue = unique(qns.begin(),qns.end());
 
-    std::vector<inqn> iq;
+    IQIndex::Storage iq;
     for(std::vector<QN>::iterator qi = qns.begin(); qi != ue; ++qi)
         {
         const QN& q = *qi;
 
         int totm = 0;
-        Foreach(const inqn& x, bigind_.iq())
-            if(x.qn == q) totm += x.index.m();
+        Foreach(const IndexQN& x, bigind_.indices())
+            if(x.qn == q) totm += x.m();
 
         Index small_qind("condensed",totm);
         int start = 0;
-        Foreach(const inqn& x, bigind_.iq())
+        Foreach(const IndexQN& x, bigind_.indices())
             if(x.qn == q)
                 {
-                const Index &xi = x.index;
+                const Index &xi = x;
                 small_to_big[std::make_pair(small_qind,start)] = xi;
                 big_to_small[xi] = std::make_pair(small_qind,start);
                 start += xi.m();
                 }
-        iq.push_back(inqn(small_qind,q));
+        iq.push_back(IndexQN(small_qind,q));
         }
 
     smallind_ = IQIndex(smallind_name,iq,bigind_.dir(),bigind_.primeLevel());
@@ -183,9 +186,12 @@ product(const IQTensor& t, IQTensor& res) const
 
     int smallind_pos = -2;
     int bigind_pos   = -2;
-    for(int j = 1; j <= t.r(); ++j)
+    //for(int j = 1; j <= t.r(); ++j)
+    int j = 0;
+    Foreach(const IQIndex& J, t.indices())
         {
-        iqinds.push_back(t.index(j));
+        //iqinds.push_back(t.index(j));
+        iqinds.push_back(J);
 
         if(iqinds.back() == smallind_) 
             {
@@ -194,7 +200,7 @@ product(const IQTensor& t, IQTensor& res) const
                 Print(smallind_);
                 Error("Incompatible Arrow for smallind");
                 }
-            smallind_pos = (j-1);
+            smallind_pos = j;
             }
         else if(iqinds.back() == bigind_) 
             {
@@ -203,8 +209,9 @@ product(const IQTensor& t, IQTensor& res) const
                 Print(bigind_);
                 Error("Incompatible Arrow for bigind");
                 }
-            bigind_pos = (j-1);
+            bigind_pos = j;
             }
+        ++j;
         }
 
     if(smallind_pos != -2) //expand condensed form into uncondensed
@@ -213,13 +220,16 @@ product(const IQTensor& t, IQTensor& res) const
 
         res = IQTensor(iqinds);
 
-        for(IQTensor::const_iten_it i = t.const_iten_begin(); i != t.const_iten_end(); ++i)
+        Foreach(const ITensor& b, t.blocks())
             {
-            int k;
-            for(k = 1; k <= i->r(); ++k)
-                if(smallind_.hasindex(i->index(k))) break;
+            Index sind;
+            Foreach(const Index& I, b.indices())
+                if(hasindex(smallind_,I))
+                    {
+                    sind = I;
+                    break;
+                    }
 
-            Index sind = i->index(k);
             for(int start = 0; start < sind.m(); )
                 {
                 Index bind = small_to_big[std::make_pair(sind,start)];
@@ -229,7 +239,7 @@ product(const IQTensor& t, IQTensor& res) const
                     C(start+kk,kk) = 1; 
                     }
                 ITensor converter(sind,bind,C);
-                converter *= (*i);
+                converter *= b;
                 res += converter;
                 start += bind.m();
                 }
@@ -247,15 +257,15 @@ product(const IQTensor& t, IQTensor& res) const
 
         res = IQTensor(iqinds);
 
-        Foreach(ITensor tt, t.itensors())
+        Foreach(ITensor tt, t.blocks())
             {
             bool gotit = false;
 
-            for(int k = 1; k <= tt.r(); ++k)
-                if(bigind_.hasindex(tt.index(k)))
+            Foreach(const Index& K, tt.indices())
+                if(hasindex(bigind_,K))
                     {
-                    std::pair<Index,int> Ii = big_to_small[tt.index(k)];
-                    tt.expandIndex(tt.index(k),Ii.first,Ii.second);
+                    std::pair<Index,int> Ii = big_to_small[K];
+                    tt.expandIndex(K,Ii.first,Ii.second);
                     res += tt;
                     gotit = true;
                     break;

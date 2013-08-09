@@ -22,10 +22,10 @@ struct ITSparseDefaults
         s2(Index("s2",2,Site)),
         s3(Index("s3",2,Site)),
         s4(Index("s4",2,Site)),
-        s1P(s1.primed()),
-        s2P(s2.primed()),
-        s3P(s3.primed()),
-        s4P(s4.primed()),
+        s1P(primed(s1)),
+        s2P(primed(s2)),
+        s3P(primed(s3)),
+        s4P(primed(s4)),
         l1(Index("l1",2)),
         l2(Index("l2",2)),
         l3(Index("l3",2)),
@@ -103,8 +103,8 @@ TEST(Constructors)
     ITSparse B(b2,b3,2);
 
     CHECK_CLOSE(sqrt(2)*2,B.norm(),1E-5);
-    CHECK(B.hasindex(b2));
-    CHECK(B.hasindex(b3));
+    CHECK(hasindex(B,b2));
+    CHECK(hasindex(B,b3));
     CHECK_EQUAL(b2.m(),B.diagSize());
 
     Vector diag(b3.m());
@@ -112,8 +112,8 @@ TEST(Constructors)
 
     ITSparse D(b3,primed(b3),diag);
     D *= -1;
-    CHECK(D.hasindex(b3));
-    CHECK(D.hasindex(primed(b3)));
+    CHECK(hasindex(D,b3));
+    CHECK(hasindex(D,primed(b3)));
     CHECK_EQUAL(diag.Length(),D.diagSize());
     CHECK_CLOSE(Norm(diag),D.norm(),1E-5);
     }
@@ -180,15 +180,15 @@ TEST(ContractingProduct)
     ITSparse D(b3,b4,1);
 
     ITensor T(a1,b2,b4,s1);
-    T.Randomize();
+    T.randomize();
 
     ITensor R = D * T;
 
-    CHECK(!R.hasindex(b4));
-    CHECK(R.hasindex(b3));
-    CHECK(R.hasindex(b2));
-    CHECK(R.hasindex(s1));
-    CHECK(R.hasindex(a1));
+    CHECK(!hasindex(R,b4));
+    CHECK(hasindex(R,b3));
+    CHECK(hasindex(R,b2));
+    CHECK(hasindex(R,s1));
+    CHECK(hasindex(R,a1));
 
     for(int j2 = 1; j2 <= b2.m(); ++j2)
     for(int j3 = 1; j3 <= b3.m(); ++j3)
@@ -203,15 +203,15 @@ TEST(ContractingProduct)
     ITSparse D2(b3,b4,diag);
 
     ITensor T2(a1,b2,b4,s1);
-    T2.Randomize();
+    T2.randomize();
 
     ITensor R2 = D2 * T2;
 
-    CHECK(!R2.hasindex(b4));
-    CHECK(R2.hasindex(b3));
-    CHECK(R2.hasindex(b2));
-    CHECK(R2.hasindex(s1));
-    CHECK(R2.hasindex(a1));
+    CHECK(!hasindex(R2,b4));
+    CHECK(hasindex(R2,b3));
+    CHECK(hasindex(R2,b2));
+    CHECK(hasindex(R2,s1));
+    CHECK(hasindex(R2,a1));
 
     for(int j2 = 1; j2 <= b2.m(); ++j2)
     for(int j3 = 1; j3 <= b3.m(); ++j3)
@@ -224,7 +224,7 @@ TEST(ContractingProduct)
 TEST(TieIndices)
     {
     ITensor T(l1,l2,a1,s2,s1);
-    T.Randomize();
+    T.randomize();
 
     Index tied("tied",l2.m());
     ITSparse S(l2,l1,s1,tied,1);
@@ -244,7 +244,7 @@ TEST(Trace)
     {
 
     ITensor A(b2,a1,b3,b5,primed(b3));
-    A.Randomize();
+    A.randomize();
     Real f = -ran1();
     A *= f;
 

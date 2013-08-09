@@ -4,9 +4,9 @@
 //
 #ifndef __ITENSOR_MPS_H
 #define __ITENSOR_MPS_H
-#include "svdworker.h"
+#include "svdalgs.h"
 #include "model.h"
-#include "option.h"
+#include "boost/function.hpp"
 
 #define Cout std::cout
 #define Endl std::endl
@@ -18,47 +18,13 @@ class MPOt;
 template <class Tensor>
 class LocalMPO;
 
+class InitState;
+
 static const LogNumber DefaultRefScale(7.58273202392352185);
 
 void 
 convertToIQ(const Model& model, const std::vector<ITensor>& A, 
             std::vector<IQTensor>& qA, QN totalq = QN(), Real cut = 1E-12);
-
-class InitState
-    {
-    typedef IQIndexVal (*SetFuncPtr)(int);
-    public:
-
-    InitState(int nsite) 
-        : N(nsite), 
-          state(N+1) 
-        { }
-
-    InitState(int nsite,SetFuncPtr setter) 
-        : N(nsite), 
-          state(N+1) 
-        { set_all(setter); }
-
-    int NN() const { return N; }
-
-    void 
-    set_all(SetFuncPtr setter)
-        { 
-        for(int j = 1; j <= N; ++j) GET(state,j-1) = (*setter)(j); 
-        }
-
-    IQIndexVal& 
-    operator()(int i) { return state.at(i-1); }
-    const IQIndexVal& 
-    operator()(int i) const { return state.at(i-1); }
-
-    operator std::vector<IQIndexVal>() const { return state; }
-
-    private:
-
-    int N;
-    std::vector<IQIndexVal> state;
-    }; 
 
 //
 // class MPSt
@@ -91,8 +57,11 @@ class MPSt
 
     MPSt(const Model& model, std::istream& s);
 
-    virtual 
-    ~MPSt() { }
+    MPSt(const MPSt& other);
+    MPSt&
+    operator=(const MPSt& other);
+
+    ~MPSt();
 
     //
     //MPSt Typedefs
@@ -118,7 +87,7 @@ class MPSt
     //
 
     int 
-    NN() const { return N;}
+    N() const { return N_;}
 
     int 
     rightLim() const { return r_orth_lim_; }
@@ -139,26 +108,32 @@ class MPSt
     typedef typename std::vector<Tensor>::const_iterator 
     AA_it;
 
+    //Returns pair of iterators which can be used in a 
+    //Foreach loop to iterate over all MPS tensors
     const std::pair<AA_it,AA_it> 
-    AA() const { return std::make_pair(A.begin()+1,A.end()); }
+    A() const { return std::make_pair(A_.begin()+1,A_.end()); }
 
+    //Read-only access to i'th MPS tensor
     const Tensor& 
-    AA(int i) const 
+    A(int i) const 
         { 
         setSite(i);
-        return A.at(i); 
+        return A_.at(i); 
         }
 
+    //Returns reference to i'th MPS tensor
+    //which allows reading and writing
     Tensor& 
-    AAnc(int i); //nc means 'non const'
+    Anc(int i); //nc stands for non-const
 
     const Model& 
     model() const { return *model_; }
 
-    const SVDWorker& 
-    svd() const { return svd_; }
-    SVDWorker& 
-    svd() { return svd_; }
+    const Spectrum& 
+    spectrum(int b) const { return spectrum_.at(b); }
+
+    Spectrum& 
+    spectrum(int b) { return spectrum_.at(b); }
 
 
     bool 
@@ -167,50 +142,73 @@ class MPSt
     isNotNull() const { return (model_!=0); }
 
     bool 
-    doRelCutoff() const { return svd_.doRelCutoff(); }
+    doRelCutoff() const { return spectrum_.front().doRelCutoff(); }
     void 
-    doRelCutoff(bool val) { svd_.doRelCutoff(val); }
+    doRelCutoff(bool val) 
+        { 
+        Foreach(Spectrum& spec, spectrum_)
+            spec.doRelCutoff(val); 
+        }
 
     bool 
-    absoluteCutoff() const { return svd_.absoluteCutoff(); }
+    absoluteCutoff() const { return spectrum_.front().absoluteCutoff(); }
     void 
-    absoluteCutoff(bool val) { svd_.absoluteCutoff(val); }
+    absoluteCutoff(bool val) 
+        { 
+        Foreach(Spectrum& spec, spectrum_)
+            spec.absoluteCutoff(val); 
+        }
 
     LogNumber 
-    refNorm() const { return svd_.refNorm(); }
+    refNorm() const { return spectrum_.front().refNorm(); }
     void 
-    refNorm(LogNumber val) { svd_.refNorm(val); }
+    refNorm(LogNumber val) 
+        { 
+        Foreach(Spectrum& spec, spectrum_)
+            spec.refNorm(val); 
+        }
 
     Real 
-    noise() const { return svd_.noise(); }
+    noise() const { return spectrum_.front().noise(); }
     void 
-    noise(Real val) { svd_.noise(val); }
+    noise(Real val) 
+        { 
+        Foreach(Spectrum& spec, spectrum_)
+            spec.noise(val); 
+        }
 
     Real 
-    cutoff() const { return svd_.cutoff(); }
+    cutoff() const { return spectrum_.front().cutoff(); }
     void 
-    cutoff(Real val) { svd_.cutoff(val); }
+    cutoff(Real val) 
+        { 
+        Foreach(Spectrum& spec, spectrum_)
+            spec.cutoff(val); 
+        }
 
     int 
-    minm() const { return svd_.minm(); }
+    minm() const { return spectrum_.front().minm(); }
     void 
-    minm(int val) { svd_.minm(val); }
+    minm(int val)
+        { 
+        Foreach(Spectrum& spec, spectrum_)
+            spec.minm(val); 
+        }
 
     int 
-    maxm() const { return svd_.maxm(); }
+    maxm() const { return spectrum_.front().maxm(); }
     void 
-    maxm(int val) { svd_.maxm(val); }
+    maxm(int val)
+        { 
+        Foreach(Spectrum& spec, spectrum_)
+            spec.maxm(val); 
+        }
 
     Real 
-    truncerr(int b) const { return svd_.truncerr(b); }
+    truncerr(int b) const { return spectrum_.at(b).truncerr(); }
 
     const Vector& 
-    eigsKept(int b) const { return svd_.eigsKept(b); }
-
-    bool 
-    showeigs() const { return svd_.showeigs(); }
-    void 
-    showeigs(bool val) { svd_.showeigs(val); }
+    eigsKept(int b) const { return spectrum_.at(b).eigsKept(); }
 
     Tensor 
     bondTensor(int b) const;
@@ -218,11 +216,19 @@ class MPSt
     bool
     doWrite() const { return do_write_; }
     void
-    doWrite(bool val) 
+    doWrite(bool val, const OptSet& opts = Global::opts()) 
         { 
-        if(!do_write_ && (val == true))
-            initWrite(); 
-        do_write_ = val;
+        if(val == do_write_) return;
+
+        if(val == true)
+            {
+            initWrite(opts); 
+            }
+        else
+            {
+            read(writedir_);
+            cleanupWrite();
+            }
         }
 
     const std::string&
@@ -251,7 +257,9 @@ class MPSt
     //
 
     MPSt& 
-    operator*=(Real a) { AAnc(l_orth_lim_+1) *= a; return *this; }
+    operator*=(Real a) { Anc(l_orth_lim_+1) *= a; return *this; }
+    MPSt& 
+    operator/=(Real a) { Anc(l_orth_lim_+1) /= a; return *this; }
 
     MPSt 
     operator*(Real r) const { MPSt res(*this); res *= r; return res; }
@@ -262,7 +270,7 @@ class MPSt
     MPSt& 
     operator+=(const MPSt& oth);
     MPSt& 
-    addNoOrth(const MPSt& oth);
+    addAssumeOrth(const MPSt& oth, const OptSet& opts = Global::opts());
 
     inline MPSt 
     operator+(MPSt res) const { res += *this; return res; }
@@ -275,7 +283,7 @@ class MPSt
     //
 
     void 
-    mapprime(int oldp, int newp, PrimeType pt = primeBoth);
+    mapprime(int oldp, int newp, IndexType type = All);
 
     void 
     primelinks(int oldp, int newp);
@@ -285,13 +293,13 @@ class MPSt
 
     IndexT 
     LinkInd(int b) const 
-        { return index_in_common(AA(b),AA(b+1),Link); }
+        { return commonIndex(A(b),A(b+1),Link); }
     IndexT 
     RightLinkInd(int i) const 
-        { return index_in_common(AA(i),AA(i+1),Link); }
+        { return commonIndex(A(i),A(i+1),Link); }
     IndexT 
     LeftLinkInd(int i)  const 
-        { return index_in_common(AA(i),AA(i-1),Link); }
+        { return commonIndex(A(i),A(i-1),Link); }
 
     //
     //MPSt orthogonalization methods
@@ -299,23 +307,23 @@ class MPSt
 
     void 
     svdBond(int b, const Tensor& AA, Direction dir, 
-            const Option& opt = Option());
+            const OptSet& opts = Global::opts());
 
     template <class LocalOpT>
     void 
     svdBond(int b, const Tensor& AA, Direction dir, 
-                const LocalOpT& PH, const Option& opt = Option());
+                const LocalOpT& PH, const OptSet& opts = Global::opts());
 
     void
-    doSVD(int b, const Tensor& AA, Direction dir, const Option& opt = Option())
+    doSVD(int b, const Tensor& AA, Direction dir, const OptSet& opts = Global::opts())
         { 
-        svdBond(b,AA,dir,opt); 
+        svdBond(b,AA,dir,opts); 
         }
 
     //Move the orthogonality center to site i 
     //(l_orth_lim_ = i-1, r_orth_lim_ = i+1)
     void 
-    position(int i, const Option& opt = Option());
+    position(int i, const OptSet& opts = Global::opts());
 
     int 
     orthoCenter() const 
@@ -325,9 +333,12 @@ class MPSt
         }
 
     void 
-    orthogonalize(const Option& opt = Option());
+    orthogonalize(const OptSet& opts = Global::opts());
 
-    //Checks if A[i] is left (left == true) 
+    void 
+    makeRealBasis(int j, const OptSet& opts = Global::opts());
+
+    //Checks if A_[i] is left (left == true) 
     //or right (left == false) orthogonalized
     bool 
     checkOrtho(int i, bool left) const;
@@ -343,38 +354,32 @@ class MPSt
 
 
     //
-    // projectOp takes the projected edge tensor W 
-    // of an operator and the site tensor X for the operator
-    // and creates the next projected edge tensor nE
-    //
-    // dir==Fromleft example:
-    //
-    //  /---A--     /---
-    //  |   |       |
-    //  E-- X -  =  nE -
-    //  |   |       |
-    //  \---A--     \---
-    //
-    void 
-    projectOp(int j, Direction dir, 
-              const Tensor& E, const Tensor& X, Tensor& nE) const;
-
-
-    //
     // Applies a bond gate to the bond that is currently
     // the OC.                                    |      |
-    // After calling position b, this bond is - A[b] - A[b+1] -
+    // After calling position b, this bond is - A_[b] - A_[b+1] -
     //
     //      |      |
     //      ==gate==
     //      |      |
-    //  - A[b] - A[b+1] -
+    //  - A_[b] - A_[b+1] -
     //
+    // Does not normalize the resulting wavefunction unless 
+    // Opt DoNormalize(true) is included in opts.
     void 
-    applygate(const Tensor& gate);
+    applygate(const Tensor& gate, const OptSet& opts = Global::opts());
 
     Real 
-    norm() const { return sqrt(psiphi(*this,*this)); }
+    norm() const 
+        { 
+        if(isOrtho())
+            {
+            return A(orthoCenter()).norm();
+            }
+        else
+            {
+            return sqrt(psiphi(*this,*this)); 
+            }
+        }
 
     int
     averageM() const;
@@ -384,60 +389,48 @@ class MPSt
         {
         Real norm_ = norm();
         if(fabs(norm_) < 1E-20) Error("Zero norm");
-        *this *= 1.0/norm_;
+        operator/=(norm_);
         return norm_;
         }
 
     bool 
     isComplex() const
-        { return A[l_orth_lim_+1].isComplex(); }
-
-    friend inline std::ostream& 
-    operator<<(std::ostream& s, const MPSt& M)
-        {
-        s << "\n";
-        for(int i = 1; i <= M.NN(); ++i) s << M.AA(i) << "\n";
-        return s;
-        }
-
-    void print(std::string name = "",Printdat pdat = HideData) const 
         { 
-        bool savep = Global::printdat();
-        Global::printdat() = (pdat==ShowData); 
-        std::cerr << "\n" << name << " =\n" << *this << "\n"; 
-        Global::printdat() = savep;
+        for(int j = 1; j <= N_; ++j)
+            {
+            if(isComplex(A_[j])) return true;
+            }
+        return false;
         }
-
-    void 
-    printIndices(const std::string& name = "") const
-        {
-        Cout << name << "=" << Endl;
-        for(int i = 1; i <= NN(); ++i) 
-            AA(i).printIndices(boost::format("AA(%d)")%i);
-        }
-
-    void 
-    printIndices(const boost::format& fname) const
-        { printIndices(fname.str()); }
 
     void 
     toIQ(QN totalq, MPSt<IQTensor>& iqpsi, Real cut = 1E-12) const
         {
         iqpsi = MPSt<IQTensor>(*model_,maxm(),cutoff());
-        iqpsi.svd_ = svd_;
-        convertToIQ(*model_,A,iqpsi.A,totalq,cut);
+        iqpsi.spectrum_ = spectrum_;
+        convertToIQ(*model_,A_,iqpsi.A_,totalq,cut);
         }
 
-protected:
+    //
+    // Deprecated methods
+    // 
+
+    //Renamed to A
+    //const Tensor& AA(int i) const;
+
+    //Renamed to Anc
+    //Tensor& AAnc(int i);
+
+    protected:
 
     //////////////////////////
     //
     //Data Members
 
-    int N;
+    int N_;
 
     mutable
-    std::vector<Tensor> A;
+    std::vector<Tensor> A_;
 
     int l_orth_lim_,
         r_orth_lim_;
@@ -446,7 +439,7 @@ protected:
 
     const Model* model_;
 
-    SVDWorker svd_;
+    std::vector<Spectrum> spectrum_;
 
     mutable
     int atb_;
@@ -480,10 +473,18 @@ protected:
             }
 
         if(j < atb_)
+            {
+            //Cout << Format("j=%d < atb_=%d, calling setBond(%d)")
+            //        % j % atb_ % j << Endl;
             setBond(j);
+            }
         else
         if(j > atb_+1)
+            {
+            //Cout << Format("j=%d > atb_+1=%d, calling setBond(%d)")
+            //        % j % (atb_+1) % (j-1) << Endl;
             setBond(j-1);
+            }
 
         //otherwise the set bond already
         //contains this site
@@ -491,10 +492,15 @@ protected:
 
 
     void
-    initWrite();
+    initWrite(const OptSet& opts = Global::opts());
+    void
+    copyWriteDir();
+    void
+    cleanupWrite();
+
 
     std::string
-    AFName(int j) const;
+    AFName(int j, const std::string& dirname = "") const;
 
     //
     //Constructor Helpers
@@ -515,12 +521,83 @@ protected:
     void 
     init_tensors(std::vector<IQTensor>& A_, const InitState& initState);
 
-private:
+    private:
+
     friend class MPSt<ITensor>;
     friend class MPSt<IQTensor>;
-}; //class MPSt<Tensor>
+
+    }; //class MPSt<Tensor>
 typedef MPSt<ITensor> MPS;
 typedef MPSt<IQTensor> IQMPS;
+
+class InitState
+    {
+    public:
+
+    typedef std::vector<IQIndexVal>
+    Storage;
+
+    typedef boost::function1<IQIndexVal,int>
+    Setter;
+
+    InitState(const Model& model)
+        : 
+        model_(&model), 
+        state_(1+model.N())
+        { }
+
+    template<class MethodPtr>
+    InitState(const Model& model, MethodPtr m)
+        : 
+        model_(&model), 
+        state_(1+model.N())
+        { 
+        setAll(m);
+        }
+
+    template<class MethodPtr>
+    InitState& 
+    set(int i, MethodPtr m)
+        { 
+        checkRange(i);
+        state_.at(i) = std::bind1st(std::mem_fun(m),model_)(i);
+        return *this;
+        }
+
+    template<class MethodPtr>
+    InitState& 
+    setAll(MethodPtr m)
+        { 
+        const
+        Setter s = std::bind1st(std::mem_fun(m),model_);
+        for(int n = 1; n <= model_->N(); ++n)
+            {
+            state_[n] = s(n);
+            }
+        return *this;
+        }
+
+    const IQIndexVal&
+    operator()(int i) const { checkRange(i); return state_.at(i); }
+
+    private:
+
+    const Model* model_;
+    Storage state_;
+
+    void
+    checkRange(int i) const
+        {
+        if(i > model_->N() || i < 1) 
+            {
+            Cout << "i = " << i << Endl;
+            Cout << "Valid range is 1 to " << model_->N() << Endl;
+            Error("i out of range");
+            }
+        }
+
+    }; 
+
 
 //
 // MPSt
@@ -531,15 +608,13 @@ template <class Tensor>
 template <class LocalOpT>
 void MPSt<Tensor>::
 svdBond(int b, const Tensor& AA, Direction dir, 
-            const LocalOpT& PH, const Option& opt)
+        const LocalOpT& PH, const OptSet& opts)
     {
     setBond(b);
-    if(opt == PreserveShape())
+    const bool use_orig_setting = spectrum_.at(b).useOrigM();
+    if(opts.getBool("UseOrigM",false)) 
         {
-        //The idea of the preserve_shape flag is to 
-        //leave any external indices of the MPS on the
-        //tensors they originally belong to
-        Error("preserve_shape not currently implemented");
+        spectrum_.at(b).useOrigM(true);
         }
 
     if(dir == Fromleft && b-1 > l_orth_lim_)
@@ -555,78 +630,101 @@ svdBond(int b, const Tensor& AA, Direction dir,
         Error("b+2 < r_orth_lim_");
         }
 
-#define USE_SVD_ONLY
-
-#ifdef USE_SVD_ONLY
-    {
-    SparseT D;
-    svd_.svd(b,AA,A[b],D,A[b+1]);
-
-    //Normalize the orthogonality center
-    //if(opt.boolEquals(DoNormalize(true)))
-    //    {
-    //    Real norm = D.norm();
-    //    D *= 1./norm;
-    //    }
-
-    //Push the singular values into the appropriate site tensor
-    if(dir == Fromleft)
-        A[b+1] *= D;
-    else
-        A[b] *= D;
-    }
-#else
-    if(cutoff() < 1E-12)
+    if(opts.getBool("UseSVD",false) || (noise() == 0 && cutoff() < 1E-12))
         {
         //Need high accuracy, use svd which calls the
         //accurate SVD method in the MatrixRef library
         SparseT D;
-        svd_.svd(b,AA,A[b],D,A[b+1]);
+        //Cout << "Calling svdBond SVD" << Endl;
+        svd(AA,A_[b],D,A_[b+1],spectrum_.at(b),opts);
 
-        //Normalize the orthogonality center
-        //if(opt.boolEquals(DoNormalize(true)))
-        //    {
-        //    Real norm = D.norm();
-        //    D *= 1./norm;
-        //    }
+        //Normalize the ortho center if requested
+        if(opts.getBool("DoNormalize",false))
+            {
+            D *= 1./D.norm();
+            }
 
         //Push the singular values into the appropriate site tensor
         if(dir == Fromleft)
-            A[b+1] *= D;
+            A_[b+1] *= D;
         else
-            A[b] *= D;
+            A_[b] *= D;
         }
     else
         {
-        //If we don't need extreme accuracy,
-        //use presumably faster density matrix approach
-        svd_.denmatDecomp(b,AA,A[b],A[b+1],dir,PH);
+        //If we don't need extreme accuracy
+        //or need to use noise term
+        //use density matrix approach
+        //Cout << "Calling svdBond denmatDecomp" << Endl;
+        denmatDecomp(AA,A_[b],A_[b+1],dir,spectrum_.at(b),PH,opts);
 
-        //Normalize the ortho center
-        //if(opt.boolEquals(DoNormalize(true)))
-        //    {
-        //    Tensor& oc = (dir == Fromleft ? A[b+1] : A[b]);
-        //    Real norm = oc.norm();
-        //    oc *= 1./norm;
-        //    }
+        //Normalize the ortho center if requested
+        if(opts.getBool("DoNormalize",false))
+            {
+            Tensor& oc = (dir == Fromleft ? A_[b+1] : A_[b]);
+            Real norm = oc.norm();
+            oc *= 1./norm;
+            }
         }
-#endif
 
     if(dir == Fromleft)
         {
         l_orth_lim_ = b;
-        if(r_orth_lim_ < b+2) r_orth_lim_ = b+2;
+        if(r_orth_lim_ < b+2) 
+            {
+            r_orth_lim_ = b+2;
+            }
         }
     else //dir == Fromright
         {
-        if(l_orth_lim_ > b-1) l_orth_lim_ = b-1;
+        if(l_orth_lim_ > b-1) 
+            {
+            l_orth_lim_ = b-1;
+            }
         r_orth_lim_ = b+1;
         }
+
+    spectrum_.at(b).useOrigM(use_orig_setting);
     }
 
 //
 // Other Methods Related to MPSt
 //
+
+//
+// projectOp takes the projected edge tensor W 
+// of an operator and the site tensor X for the operator
+// and creates the next projected edge tensor nE
+//
+// dir==Fromleft example:
+//
+//  /---A--     /---
+//  |   |       |
+//  E-- X -  =  nE -
+//  |   |       |
+//  \---A--     \---
+//
+template <class Tensor>
+void 
+projectOp(const MPSt<Tensor>& psi, int j, Direction dir, 
+          const Tensor& E, const Tensor& X, Tensor& nE)
+    {
+    if(dir==Fromleft && j > psi.leftLim()) 
+        { 
+        Cout << Format("projectOp: from left j > l_orth_lim_ (j=%d,leftLim=%d)")%j%psi.leftLim() << Endl;
+        Error("Projecting operator at j > l_orth_lim_"); 
+        }
+    if(dir==Fromright && j < psi.rightLim()) 
+        { 
+        Cout << Format("projectOp: from left j < r_orth_lim_ (j=%d,r_orth_lim_=%d)")%j%psi.rightLim() << Endl;
+        Error("Projecting operator at j < r_orth_lim_"); 
+        }
+    nE = (E.isNull() ? psi.A(j) : E * psi.A(j));
+    nE *= X; 
+    nE *= conj(primed(psi.A(j)));
+    }
+
+
 
 int 
 findCenter(const IQMPS& psi);
@@ -637,14 +735,8 @@ checkQNs(const MPS& psi) { return true; }
 bool 
 checkQNs(const IQMPS& psi);
 
-inline QN 
-totalQN(const IQMPS& psi)
-    {
-    int center = findCenter(psi);
-    if(center == -1)
-        Error("Could not find ortho. center");
-    return psi.AA(center).div();
-    }
+QN
+totalQN(const IQMPS& psi);
 
 //
 // <psi | phi>
@@ -656,18 +748,20 @@ psiphi(const MPSType& psi, const MPSType& phi, Real& re, Real& im)
     typedef typename MPSType::TensorT
     Tensor;
 
-    const int N = psi.NN();
-    if(N != phi.NN()) Error("psiphi: mismatched N");
+    const int N = psi.N();
+    if(N != phi.N()) Error("psiphi: mismatched N");
 
-    Tensor L = phi.AA(1) * conj(primeind(psi.AA(1),psi.LinkInd(1))); 
+    Tensor L = phi.A(1) * conj(primed(psi.A(1),psi.LinkInd(1))); 
 
-    for(int i = 2; i < psi.NN(); ++i) 
+    for(int i = 2; i < N; ++i) 
         { 
-        L = L * phi.AA(i) * conj(primelink(psi.AA(i))); 
+        L = L * phi.A(i) * conj(primed(psi.A(i),Link)); 
         }
-    L = L * phi.AA(N);
+    L = L * phi.A(N);
 
-    BraKet(primeind(psi.AA(N),psi.LinkInd(N-1)),L,re,im);
+    Complex z = BraKet(primed(psi.A(N),psi.LinkInd(N-1)),L);
+    re = z.real();
+    im = z.imag();
     }
 
 template <class MPSType>
@@ -676,9 +770,8 @@ psiphi(const MPSType& psi, const MPSType& phi) //Re[<psi|phi>]
     {
     Real re, im;
     psiphi(psi,phi,re,im);
-    if(im != 0) 
-	if(fabs(im) > 1.0e-12 * fabs(re))
-	    std::cerr << "Real psiphi: WARNING, dropping non-zero imaginary part of expectation value.\n";
+    if(fabs(im) > (1E-12 * fabs(re)) )
+	    Cout << "Real psiphi: WARNING, dropping non-zero imaginary part of expectation value." << Endl;
     return re;
     }
 
@@ -688,8 +781,14 @@ psiphi(const MPSType& psi, const MPSType& phi) //Re[<psi|phi>]
 void 
 fitWF(const IQMPS& psi_basis, IQMPS& psi_to_fit);
 
-//Template method for efficiently summing a set of MPS's or MPO's 
-//(or any class supporting operator+=)
+//
+// Template method for efficiently summing 
+// a set of MPS's or MPO's (or any class supporting operator+=)
+// Performs the sum in a tree-like fashion in an attempt to
+// leave the largest summands for the last few steps
+//
+// Assumes terms are zero-indexed
+//
 template <typename MPSType>
 void 
 sum(const std::vector<MPSType>& terms, MPSType& res, 
@@ -698,16 +797,16 @@ sum(const std::vector<MPSType>& terms, MPSType& res,
     const int Nt = terms.size();
     if(Nt == 2)
         { 
-        res = terms[0];
+        res = terms.at(0);
         res.cutoff(cut); 
         res.maxm(maxm);
         //std::cerr << boost::format("Before +=, cutoff = %.1E, maxm = %d\n")%(res.cutoff())%(res.maxm());
-        res += terms[1];
+        res += terms.at(1);
         }
     else 
     if(Nt == 1) 
         {
-        res = terms[0];
+        res = terms.at(0);
         res.cutoff(cut); 
         res.maxm(maxm);
         }
@@ -720,8 +819,8 @@ sum(const std::vector<MPSType>& terms, MPSType& res,
                              newterms(nsize); 
         for(int n = 0, np = 0; n < Nt-1; n += 2, ++np)
             {
-            tpair[0] = terms[n]; 
-            tpair[1] = terms[n+1];
+            tpair[0] = terms.at(n); 
+            tpair[1] = terms.at(n+1);
             sum(tpair,newterms.at(np),cut,maxm);
             }
         if(Nt%2 == 1) newterms.at(nsize-1) = terms.back();
@@ -729,6 +828,16 @@ sum(const std::vector<MPSType>& terms, MPSType& res,
         //Recursively call sum again
         sum(newterms,res,cut,maxm);
         }
+    }
+
+template <class Tensor>
+std::ostream& 
+operator<<(std::ostream& s, const MPSt<Tensor>& M)
+    {
+    s << "\n";
+    for(int i = 1; i <= M.N(); ++i) 
+        s << M.A(i) << "\n";
+    return s;
     }
 
 #undef Cout

@@ -13,7 +13,7 @@ class Hubbard : public Model
     Hubbard();
 
     Hubbard(int N, 
-            const Option& opt1 = Option(), const Option& opt2 = Option());
+            const OptSet& opts = Global::opts());
 
     Hubbard(std::ifstream& s) { doRead(s); }
 
@@ -47,7 +47,7 @@ class Hubbard : public Model
     private:
 
     virtual int
-    getNN() const;
+    getN() const;
 
     virtual const IQIndex&
     getSi(int i) const;
@@ -128,12 +128,11 @@ Hubbard()
     { }
 
 inline Hubbard::
-Hubbard(int N, const Option& opt1, const Option& opt2)
+Hubbard(int N, const OptSet& opts)
     : N_(N),
       site_(N_+1)
     { 
-    OptionSet oset(opt1,opt2);
-    conserveNf_ = oset.boolOrDefault("ConserveNf",true);
+    conserveNf_ = opts.getBool("ConserveNf",true);
     constructSites();
     }
 
@@ -159,6 +158,10 @@ doRead(std::istream& s)
     site_.resize(N_+1);
     for(int j = 1; j <= N_; ++j) 
         site_.at(j).read(s);
+    if(site_.at(1).qn(2).Nf() == 1)
+        conserveNf_ = true;
+    else
+        conserveNf_ = false;
     }
 
 void inline Hubbard::
@@ -170,7 +173,7 @@ doWrite(std::ostream& s) const
     }
 
 int inline Hubbard::
-getNN() const
+getN() const
     { return N_; }
 
 inline const IQIndex& Hubbard::
@@ -179,7 +182,7 @@ getSi(int i) const
 
 IQIndex inline Hubbard::
 getSiP(int i) const
-    { return site_.at(i).primed(); }
+    { return primed(site_.at(i)); }
 
 IQIndexVal inline Hubbard::
 Emp(int i) const
@@ -282,7 +285,7 @@ makeCup(int i) const
     {
     IQTensor Cup(conj(si(i)),siP(i));
     Cup(Up(i),EmpP(i)) = 1;
-    Cup(UpDn(i),DnP(i)) = -1;
+    Cup(UpDn(i),DnP(i)) = 1;
     return Cup;
     }
 
@@ -291,7 +294,7 @@ makeCdagup(int i) const
     {
     IQTensor Cdagup(conj(si(i)),siP(i));
     Cdagup(Emp(i),UpP(i)) = 1;
-    Cdagup(Dn(i),UpDnP(i)) = -1;
+    Cdagup(Dn(i),UpDnP(i)) = 1;
     return Cdagup;
     }
 
@@ -300,7 +303,7 @@ makeCdn(int i) const
     {
     IQTensor Cdn(conj(si(i)),siP(i));
     Cdn(Dn(i),EmpP(i)) = 1;
-    Cdn(UpDn(i),UpP(i)) = 1;
+    Cdn(UpDn(i),UpP(i)) = -1;
     return Cdn;
     }
 
@@ -309,7 +312,7 @@ makeCdagdn(int i) const
     {
     IQTensor Cdagdn(conj(si(i)),siP(i));
     Cdagdn(Emp(i),DnP(i)) = 1;
-    Cdagdn(Up(i),UpDnP(i)) = 1;
+    Cdagdn(Up(i),UpDnP(i)) = -1;
     return Cdagdn;
     }
 

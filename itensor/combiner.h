@@ -71,6 +71,7 @@ class Combiner
     void 
     addleft(const Index& l);// Include another left index
 
+    //Call addleft on a vector of Indices ls[0]..ls[ls.size()-1]
     void
     addleft(const std::vector<Index>& ls);
 
@@ -78,17 +79,14 @@ class Combiner
     void 
     init(std::string rname = "combined", 
          IndexType type = Link, 
-         Arrow dir = Switch,
+         Arrow dir = Out,
          int primelevel = 0) const;
 
-    int 
-    findindex(const Index& I) const;
-
-    bool 
-    hasindex(const Index& I) const;
+    void
+    prime(int inc = 1);
 
     void
-    doprime(PrimeType pr, int inc = 1);
+    prime(IndexType type, int inc = 1);
 
     friend Combiner
     primed(Combiner C, int inc = 1);
@@ -184,41 +182,36 @@ init(std::string rname, IndexType type, Arrow dir, int primelevel) const
     initted = true;
     }
 
-inline
-int Combiner::
-findindex(const Index& I) const
-    {
-    for(int j = 1; j <= rl_; ++j)
-        { if(left_[j] == I) return j; }
-    return 0;
-    }
-
-inline
-bool Combiner::
-hasindex(const Index& I) const
-    {
-    for(int j = 1; j <= rl_; ++j) if(left_[j] == I) return true;
-    return false;
-    }
-
-inline
-void Combiner::
-doprime(PrimeType pr, int inc)
+void inline Combiner::
+prime(int inc)
     {
     for(int j = 1; j <= rl_; ++j) 
         {
-        left_[j].doprime(pr,inc);
+        left_[j].prime(inc);
         }
     if(initted)
         {
-        right_.doprime(pr,inc);
+        right_.prime(inc);
+        }
+    }
+
+void inline Combiner::
+prime(IndexType type, int inc)
+    {
+    for(int j = 1; j <= rl_; ++j) 
+        {
+        left_[j].prime(type,inc);
+        }
+    if(initted)
+        {
+        right_.prime(type,inc);
         }
     }
 
 Combiner inline
 primed(Combiner C, int inc)
     {
-    C.doprime(primeBoth,inc);
+    C.prime(All,inc);
     return C;
     }
 
@@ -235,8 +228,8 @@ operator ITensor() const
     */
 
     //Use a kronecker delta tensor to convert this Combiner into an Tensor
-    ITensor res = operator*(ITensor(right_,right_.primed(5),1));
-    res.primeind(right_.primed(5),-5);
+    ITensor res = operator*(ITensor(right_,primed(right_,5),1));
+    res.prime(primed(right_,5),-5);
     return res;
     }
 
@@ -246,18 +239,22 @@ product(const ITensor& t, ITensor& res) const
     {
     init();
 
-    int j;
-    if((j = t.findindex(right_)) != 0)
+    if(hasindex(t,right_))
         {
-        std::vector<Index> nindices; 
-        nindices.reserve(t.r()+rl_-1);
-        for(int i = 1; i < j; ++i)
-            nindices.push_back(t.index(i));
-        for(int i = 1; i <= rl_; ++i)
-            nindices.push_back(left_[i]);
-        for(int i = j+1; i <= t.r(); ++i)
-            nindices.push_back(t.index(i));
-        res = ITensor(nindices,t);
+        IndexSet<Index> nind;
+        Foreach(const Index& I, t.indices())
+            {
+            if(I == right_)
+                {
+                for(int i = 1; i <= rl_; ++i)
+                    nind.addindex(left_[i]);
+                }
+            else
+                {
+                nind.addindex(I);
+                }
+            }
+        res = ITensor(nind,t);
         return;
         }
 
@@ -272,6 +269,20 @@ uniqueReal() const
         ur += left_[j].uniqueReal();
     return ur;
     }
+
+//
+// Combiner helper method
+//
+
+bool inline
+hasindex(const Combiner& C, const Index& I)
+    {
+    for(int j = 1; j <= C.rl(); ++j) 
+        if(C.left(j) == I) return true;
+    return false;
+    }
+
+
 
 inline 
 std::ostream& 

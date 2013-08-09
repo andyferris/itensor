@@ -6,6 +6,7 @@
 using namespace std;
 using boost::format;
 using boost::array;
+using boost::make_shared;
 
 ITSparse::
 ITSparse()
@@ -62,10 +63,10 @@ ITSparse(const Index& i1, const Index& i2, const Vector& diag)
     scale_(1)
     { 
 #ifdef DEBUG
-    if(diag_.Length() != is_.minM())
+    if(diag_.Length() != minM(is_))
         {
         Print(is_);
-        Print(is_.minM());
+        Print(minM(is_));
         Print(diag_.Length());
         Error("Vector size must be same as smallest m (> 1)");
         }
@@ -90,10 +91,10 @@ ITSparse(const Index& i1, const Index& i2,
     scale_(1)
     {
 #ifdef DEBUG
-    if(diag_.Length() != is_.minM())
+    if(diag_.Length() != minM(is_))
         {
         Print(is_);
-        Print(is_.minM());
+        Print(minM(is_));
         Print(diag_.Length());
         Error("Vector size must be same as smallest m (> 1)");
         }
@@ -113,7 +114,7 @@ int ITSparse::
 diagSize() const
     {
     if(diagAllSame())
-        return is_.minM();
+        return minM(is_);
     else
         return diag_.Length();
     }
@@ -181,7 +182,7 @@ operator+=(const ITSparse& other)
 
     //Determine a scale factor for the sum
     Real scalefac = 1;
-    if(scale_.magnitudeLessThan(other.scale_)) 
+    if(!this_allsame && scale_.magnitudeLessThan(other.scale_)) 
         {
         this->scaleTo(other.scale_); 
         }
@@ -193,7 +194,7 @@ operator+=(const ITSparse& other)
     //Already checked both diagAllSame case
     if(this_allsame)
         {
-        diag_ = other.diag_;
+        diag_.ReDimension(other.diag_.Length());
         diag_ = 1;
         diag_ += scalefac*other.diag_;
         }
@@ -265,7 +266,10 @@ scaleTo(LogNumber newscale) const
 	Error("Trying to scale to a 0 lognumber in ITSparse");
     //If diag is all same no need to rescale
     if(diag_.Length() == 0) 
-	{ scale_ = newscale; return; }
+        { 
+        Error("Cannot call scaleTo on ITSparse with allsame diag");
+        return; 
+        }
     if(scale_ == newscale) return;
     //solo();
     scale_ /= newscale;
@@ -274,17 +278,9 @@ scaleTo(LogNumber newscale) const
     }
 
 void ITSparse::
-print(std::string name,Printdat pdat) const 
-    { 
-    Global::printdat() = (pdat==ShowData); 
-    std::cerr << "\n" << name << " =\n" << *this << "\n"; 
-    Global::printdat() = false; 
-    }
-
-void ITSparse::
 read(std::istream& s)
     {
-    readVec(s,diag_);
+    diag_.read(s);
     is_.read(s);
     scale_.read(s);
     }
@@ -292,7 +288,7 @@ read(std::istream& s)
 void ITSparse::
 write(std::ostream& s) const
     {
-    writeVec(s,diag_);
+    diag_.write(s);
     is_.write(s);
     scale_.write(s);
     }
@@ -302,6 +298,25 @@ product(const ITSparse& S, const ITensor& T, ITensor& res)
     {
     if(!S.isDiag()) 
         Error("product only implemented for diagonal ITSparses");
+
+    if(T.isComplex())
+        {
+        ITensor ri;
+        product(S,imagPart(T),ri);
+        product(S,realPart(T),res);
+        if(res.scale_.sign() != 0)
+            {
+            ri.scaleTo(res.scale_);
+            }
+        else
+            {
+            res.soloReal();
+            res.r_->v *= 0;
+            res.scale_ = ri.scale_;
+            }
+        res.i_.swap(ri.r_);
+        return;
+        }
 
     //This is set to true if some of the indices
     //of res come from S.
@@ -316,21 +331,24 @@ product(const ITSparse& S, const ITensor& T, ITensor& res)
     //
     //The ri pointer does the same
     //but for res
-    int one = 1;
-    array<int*,NMAX+1> ti,
-                       ri; 
-    ti.assign(&one);
-    ri.assign(&one);
+    const int zero = 0;
+    array<const int*,NMAX+1> ti,
+                             ri; 
+
+    for(int n = 0; n <= NMAX; ++n)
+        {
+        ti[n] = &zero;
+        ri[n] = &zero;
+        }
 
     //Index that will loop over 
     //the diagonal elems of S
-    int diag_ind = 1;
+    int diag_ind = 0;
     const int dsize = S.diagSize();
 
     //Create a Counter that only loops
     //over the free Indices of T
     Counter tc;
-    tc.n[0] = 0;
 
     res.is_.clear();
     int alloc_size = 1;
@@ -353,7 +371,7 @@ product(const ITSparse& S, const ITensor& T, ITensor& res)
     //Analyze contracted Indices
     for(int i = 1; i <= S.r(); ++i)
     for(int j = 1; j <= T.r(); ++j)
-        if(S.index(i) == T.index(j))
+        if(S.is_.index(i) == T.is_.index(j))
             {
             scon[i] = j;
             tcon[j] = i;
@@ -366,8 +384,8 @@ product(const ITSparse& S, const ITensor& T, ITensor& res)
     for(int i = 1; i <= S.rn(); ++i)
         if(scon[i] == 0)
             {
-            res.is_.addindexn(S.index(i));
-            alloc_size *= S.m(i);
+            res.is_.addindex(S.index(i));
+            alloc_size *= S.index(i).m();
             res_has_Sind = true;
 
             //Link ri pointer to diagonal of S
@@ -376,23 +394,23 @@ product(const ITSparse& S, const ITensor& T, ITensor& res)
 
     //Put uncontracted m != 1 Indices
     //of T into res
-    for(int i = 1; i <= T.rn(); ++i)
+    for(int i = 1; i <= T.is_.rn(); ++i)
         if(tcon[i] == 0)
             {
-            res.is_.addindexn(T.index(i));
-            alloc_size *= T.m(i);
+            res.is_.addindex(T.is_[i-1]);
+            alloc_size *= T.is_[i-1].m();
 
             //Init appropriate elements
             //of Counter tc
-            tc.n[++tc.rn_] = T.m(i);
-            ++tc.r_;
+            tc.n[++tc.rn] = T.is_[i-1].m();
+            ++tc.r;
             //Link up ti pointer
-            //cerr << format("Linking ti[%d] to tc.i[%d] (tc.n[%d] = %d)\n") % i % tc.rn_ % tc.rn_ % (tc.n[tc.rn_]);
-            ti[i] = &(tc.i[tc.rn_]);
+            //cerr << format("Linking ti[%d] to tc.i[%d] (tc.n[%d] = %d)\n") % i % tc.rn % tc.rn % (tc.n[tc.rn]);
+            ti[i] = &(tc.i[tc.rn]);
 
             //Link ri pointer to free index of T
-            //cerr << format("Linking ri[%d] to tc.i[%d] (tc.n[%d] = %d)\n") % res.is_.r() % tc.rn_ % tc.rn_ % (tc.n[tc.rn_]);
-            ri[res.is_.r()] = &(tc.i[tc.rn_]);
+            //cerr << format("Linking ri[%d] to tc.i[%d] (tc.n[%d] = %d)\n") % res.is_.r() % tc.rn % tc.rn % (tc.n[tc.rn]);
+            ri[res.is_.r()] = &(tc.i[tc.rn]);
             }
         else
             {
@@ -406,15 +424,15 @@ product(const ITSparse& S, const ITensor& T, ITensor& res)
     for(int i = S.rn()+1; i <= S.r(); ++i)
         if(scon[i] == 0)
             {
-            res.is_.addindex1(S.index(i));
+            res.is_.addindex(S.index(i));
             }
 
     //Put uncontracted m == 1 Indices
     //of T into res
-    for(int i = T.rn()+1; i <= T.r(); ++i)
+    for(int i = T.is_.rn()+1; i <= T.r(); ++i)
         if(tcon[i] == 0)
             {
-            res.is_.addindex1(T.index(i));
+            res.is_.addindex(T.is_.index(i));
             }
 
 #ifdef DEBUG
@@ -435,33 +453,33 @@ product(const ITSparse& S, const ITensor& T, ITensor& res)
     //Indices than T, though.
     if(S.rn() == 0)
         {
-        res.p = T.p;
+        res.r_ = T.r_;
+        res.i_ = T.i_;
         if(!S.diagAllSame())
             res *= S.diag_(1);
         return;
         }
 
     //Allocate a new dat for res if necessary
-    if(res.isNull() || res.p->count() != 1) 
+    if(res.isNull() || !res.r_.unique())
         { 
-        res.p = new ITDat(alloc_size); 
+        res.r_ = boost::make_shared<ITDat>(alloc_size); 
         }
     else
         {
-        res.p->v.ReDimension(alloc_size);
-        res.p->v *= 0;
+        res.r_->v.ReDimension(alloc_size);
+        res.r_->v *= 0;
         }
 
     //Finish initting Counter tc
-    for(int k = tc.rn_+1; k <= NMAX; ++k)
+    for(int k = tc.rn+1; k <= NMAX; ++k)
         {
         tc.n[k] = 1;
         }
-    tc.reset(1);
 
 
-    const Vector& Tdat = T.p->v;
-    Vector& resdat = res.p->v;
+    const Vector& Tdat = T.r_->v;
+    Vector& resdat = res.r_->v;
 
     if(S.diagAllSame())
         {
@@ -470,38 +488,38 @@ product(const ITSparse& S, const ITensor& T, ITensor& res)
             {
             //cout << "Doing allSame, res_has_Sind case" << endl;
             //cout << "Case I\n";
-            for(; tc.notDone(); ++tc)
-            for(diag_ind = 1; diag_ind <= dsize; ++diag_ind)
+            for(tc.reset(); tc.notDone(); ++tc)
+            for(diag_ind = 0; diag_ind < dsize; ++diag_ind)
                 {
-                resdat(res._ind(*ri[1],*ri[2],
-                                *ri[3],*ri[4],
-                                *ri[5],*ri[6],
-                                *ri[7],*ri[8]))
-                 =  Tdat(T._ind(*ti[1],*ti[2],
-                                *ti[3],*ti[4],
-                                *ti[5],*ti[6],
-                                *ti[7],*ti[8]));
+                resdat[_ind(res.is_,*ri[1],*ri[2],
+                                    *ri[3],*ri[4],
+                                    *ri[5],*ri[6],
+                                    *ri[7],*ri[8])]
+                 =  Tdat[_ind(T.is_,*ti[1],*ti[2],
+                                    *ti[3],*ti[4],
+                                    *ti[5],*ti[6],
+                                    *ti[7],*ti[8])];
                 }
             }
         else
             {
             //cout << "Doing allSame, !res_has_Sind case" << endl;
             //cout << "Case II\n";
-            for(; tc.notDone(); ++tc)
+            for(tc.reset(); tc.notDone(); ++tc)
                 {
                 Real val = 0;
-                for(diag_ind = 1; diag_ind <= dsize; ++diag_ind)
+                for(diag_ind = 0; diag_ind < dsize; ++diag_ind)
                     {
                     val +=
-                    Tdat(T._ind(*ti[1],*ti[2],
-                                *ti[3],*ti[4],
-                                *ti[5],*ti[6],
-                                *ti[7],*ti[8]));
+                    Tdat[_ind(T.is_,*ti[1],*ti[2],
+                                    *ti[3],*ti[4],
+                                    *ti[5],*ti[6],
+                                    *ti[7],*ti[8])];
                     }
-                resdat(res._ind(*ri[1],*ri[2],
-                                *ri[3],*ri[4],
-                                *ri[5],*ri[6],
-                                *ri[7],*ri[8]))
+                resdat[_ind(res.is_,*ri[1],*ri[2],
+                                    *ri[3],*ri[4],
+                                    *ri[5],*ri[6],
+                                    *ri[7],*ri[8])]
                 = val;
                 }
             }
@@ -512,39 +530,39 @@ product(const ITSparse& S, const ITensor& T, ITensor& res)
         if(res_has_Sind)
             {
             //cout << "Case III\n";
-            for(; tc.notDone(); ++tc)
-            for(diag_ind = 1; diag_ind <= dsize; ++diag_ind)
+            for(tc.reset(); tc.notDone(); ++tc)
+            for(diag_ind = 0; diag_ind < dsize; ++diag_ind)
                 {
-                resdat(res._ind(*ri[1],*ri[2],
-                                *ri[3],*ri[4],
-                                *ri[5],*ri[6],
-                                *ri[7],*ri[8]))
-                 = S.diag_(diag_ind) 
-                   * Tdat(T._ind(*ti[1],*ti[2],
-                                 *ti[3],*ti[4],
-                                 *ti[5],*ti[6],
-                                 *ti[7],*ti[8]));
+                resdat[_ind(res.is_,*ri[1],*ri[2],
+                                    *ri[3],*ri[4],
+                                    *ri[5],*ri[6],
+                                    *ri[7],*ri[8])]
+                 = S.diag_[diag_ind] 
+                   * Tdat[_ind(T.is_,*ti[1],*ti[2],
+                                     *ti[3],*ti[4],
+                                     *ti[5],*ti[6],
+                                     *ti[7],*ti[8])];
                 }
             }
         else
             {
             //cout << "Case IV\n";
-            for(; tc.notDone(); ++tc)
+            for(tc.reset(); tc.notDone(); ++tc)
                 {
                 Real val = 0;
-                for(diag_ind = 1; diag_ind <= dsize; ++diag_ind)
+                for(diag_ind = 0; diag_ind < dsize; ++diag_ind)
                     {
                     val +=
-                    S.diag_(diag_ind) 
-                    * Tdat(T._ind(*ti[1],*ti[2],
-                                  *ti[3],*ti[4],
-                                  *ti[5],*ti[6],
-                                  *ti[7],*ti[8]));
+                    S.diag_[diag_ind] 
+                    * Tdat[_ind(T.is_,*ti[1],*ti[2],
+                                      *ti[3],*ti[4],
+                                      *ti[5],*ti[6],
+                                      *ti[7],*ti[8])];
                     }
-                resdat(res._ind(*ri[1],*ri[2],
-                                *ri[3],*ri[4],
-                                *ri[5],*ri[6],
-                                *ri[7],*ri[8]))
+                resdat[_ind(res.is_,*ri[1],*ri[2],
+                                    *ri[3],*ri[4],
+                                    *ri[5],*ri[6],
+                                    *ri[7],*ri[8])]
                 = val;
                 }
             }

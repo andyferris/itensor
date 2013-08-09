@@ -6,13 +6,16 @@
 #define __ITENSOR_SPINONE_H
 #include "../model.h"
 
+#define Cout std::cout
+#define Endl std::endl
+
 class SpinOne : public Model
     {
     public:
 
     SpinOne();
 
-    SpinOne(int N, bool shalf_edge = false);
+    SpinOne(int N, const OptSet& opts = Global::opts());
 
     SpinOne(std::ifstream& s) { doRead(s); }
 
@@ -37,7 +40,7 @@ class SpinOne : public Model
     private:
 
     virtual int
-    getNN() const;
+    getN() const;
 
     virtual const IQIndex&
     getSi(int i) const;
@@ -76,7 +79,7 @@ class SpinOne : public Model
     doWrite(std::ostream& s) const;
 
     virtual void
-    constructSites(bool shalf_edge);
+    constructSites(const OptSet& opts);
         
     //Data members -----------------
 
@@ -92,20 +95,26 @@ SpinOne()
     { }
 
 inline SpinOne::
-SpinOne(int N, bool shalf_edge)
+SpinOne(int N, const OptSet& opts)
     : N_(N),
       site_(N_+1)
     { 
-    constructSites(shalf_edge);
+    constructSites(opts);
     }
 
 inline void SpinOne::
-constructSites(bool shalf_edge)
+constructSites(const OptSet& opts)
     {
     for(int j = 1; j <= N_; ++j)
         {
-        if(shalf_edge && (j == 1 || j == N_))
+        if((opts.getBool("SHalfEdge",false) && (j==1 || j == N_))
+           || (opts.getBool("SHalfLeftEdge",false) && j==1))
             {
+            if(opts.getBool("Verbose",false))
+                {
+                Cout << "Placing a S=1/2 at site " << j << Endl;
+                }
+
             site_.at(j) = IQIndex(nameint("S=1/2 site=",j),
                 Index(nameint("Up for site",j),1,Site),QN(+1,0),
                 Index(nameint("Dn for site",j),1,Site),QN(-1,0));
@@ -138,7 +147,7 @@ doWrite(std::ostream& s) const
     }
 
 inline int SpinOne::
-getNN() const
+getN() const
     { return N_; }
 
 inline const IQIndex& SpinOne::
@@ -147,7 +156,7 @@ getSi(int i) const
 
 inline IQIndex SpinOne::
 getSiP(int i) const
-    { return site_.at(i).primed(); }
+    { return primed(site_.at(i)); }
 
 inline IQIndexVal SpinOne::
 Up(int i) const
@@ -316,5 +325,8 @@ makeSy2(int i) const
     Sy2(Dn(i),UpP(i)) = -0.5;
     return Sy2;
     }
+
+#undef Cout
+#undef Endl
 
 #endif
